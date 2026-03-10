@@ -1,12 +1,78 @@
-# LabClaw Multi-Domain Science Roadmap
+# LabClaw Roadmap
 
-LabClaw's core architecture is **domain-agnostic** — the plugin system supports any science domain through `DomainPlugin`. This document outlines the planned domain expansions.
+LabClaw's core architecture is **domain-agnostic** — the plugin system supports any science domain through `DomainPlugin`. This document outlines the release plan and domain expansions.
 
-## Current Status (v0.0.2)
+## Release Plan
 
-- **Core:** Domain-agnostic engine with 5-layer stack
-- **Built-in domains:** Generic, Neuroscience (built-in domain pack)
-- **Plugin types:** DevicePlugin, DomainPlugin, AnalysisPlugin
+### v0.0.10 — Foundation ✅
+- 5-layer architecture (Hardware → Platform → Engine → Memory → Persona)
+- 7-step scientific method loop (OBSERVE → ASK → HYPOTHESIZE → PREDICT → EXPERIMENT → ANALYZE → CONCLUDE)
+- Event-driven architecture with in-memory bus
+- Plugin protocols (DevicePlugin, DomainPlugin, AnalysisPlugin)
+- MCP server (labclaw-mcp)
+- REST API (FastAPI, port 18800)
+- 100% test coverage enforced
+
+### v0.0.11 — Agentic Steps ✅
+- LLM-backed ConcludeStep (natural-language synthesis with template fallback)
+- LLM-backed ExperimentStep (LLM evaluates Bayesian proposals against domain knowledge)
+- Unified OrchestratorConfig (max_llm_calls, seed, skip_steps)
+- CLI `--llm` / `--no-llm` toggle
+
+### v0.0.14 — Persistent Knowledge Graph ✅
+- SQLiteTierBBackend as default (FTS5 search, restart survival)
+- Past findings feed into HypothesizeStep via context_findings
+- Pattern deduplication in AskStep
+- Memory search API (findings, KG nodes, KG neighbors)
+
+### v0.0.12 — Plugin Wiring ✅
+- Plugin → Sentinel translation layer
+- Sentinels wired into ObserveStep
+- Plugin hypothesis templates wired into HypothesisGenerator
+- Plugin lifecycle management in daemon
+- Functional neuroscience plugin (DomainPlugin + AnalysisPlugin)
+- Plugin CLI scaffold (`labclaw plugin create`)
+
+### v0.0.13 — MCP Client & Agent Bridge (current)
+- **MCP client**: bidirectional MCP — LabClaw as both server and client
+- **MCP tool adapter**: convert external MCP tool schemas → AgentTool instances
+- **ToolUniverse integration**: 1000+ scientific tools via Compact Mode (4 meta-tools)
+- **BioMCP integration**: pre-configured PubMed, ClinicalTrials, MyVariant, MyGene access
+- **OrchestratorAgent**: LLM decides when to call external tools during the scientific loop
+- **Plugin-to-MCP exposure**: auto-register plugin capabilities as MCP server tools
+
+### v0.0.15 — Publish & Stabilize
+- PyPI release: `pip install labclaw[science,memory,llm]`
+- Docker on GHCR (multi-platform amd64/arm64)
+- Crash recovery (daemon state persistence)
+- SQLite schema versioning + migrations
+- MkDocs documentation site
+- 1-hour CI soak test
+
+### v0.0.16 — Scientific Tool Ecosystem
+- **K-Dense scientific skills bridge**: 170+ Claude-optimized skills as LabClaw plugins
+- **Lab automation adapters**: Opentrons MCP, SiLA2 protocol bridge
+- **BayBE optimization plugin**: Bayesian optimization for chemistry/materials (Merck, Apache 2.0)
+- **Tool registry + marketplace API**: unified tool discovery across internal + MCP + ToolUniverse
+- **Multi-agent data scientist**: parallel sub-agent analysis during AnalyzeStep
+- **Tool usage memory**: track tool success rates, feed into self-evolution engine
+
+---
+
+## MCP Ecosystem Integration
+
+LabClaw connects to the growing ecosystem of scientific MCP servers:
+
+| MCP Server | Tools | Integration |
+|------------|-------|-------------|
+| **ToolUniverse** (Harvard MIMS) | 1000+ scientific tools | Compact Mode meta-tools |
+| **BioMCP** | PubMed, ClinicalTrials, MyVariant, MyGene | Literature + variant search |
+| **Holy Bio MCP** | KEGG, UniProt, PDB, BLAST | Structural biology + pathways |
+| **Opentrons MCP** | Liquid handler automation | Lab hardware control |
+| **BioContextAI** | 45+ registries (GEO, ENCODE, ClinVar) | Multi-database queries |
+| **claude-skills-mcp** (K-Dense) | 170+ scientific skills | Semantic skill discovery |
+
+---
 
 ## Domain Plugin Architecture
 
@@ -27,12 +93,10 @@ A new domain = **< 100 lines** of Python to define sample types, safety rules, a
 
 ### Tier 1 — Near-term (v0.1.x)
 
-These domains have clear data formats and the highest demand.
-
 | Domain | Key Instruments | Data Types | Status |
 |--------|----------------|------------|--------|
-| **Neuroscience** | Two-photon, EEG, behavioral rigs | TIFF, NWB, CSV, video | **Built**  |
-| **Molecular Biology** | qPCR, gel imager, plate reader | CSV, TIFF, absorbance | **Partial** (qPCR driver exists) |
+| **Neuroscience** | Two-photon, EEG, behavioral rigs | TIFF, NWB, CSV, video | **Built** |
+| **Molecular Biology** | qPCR, gel imager, plate reader | CSV, TIFF, absorbance | **Partial** |
 | **Chemistry** | Spectrometers, HPLC, LC-MS | CSV, mzML, JCAMP-DX | Planned |
 | **Materials Science** | SEM, XRD, tensile testing | TIFF, CSV, CIF | Planned |
 
@@ -52,12 +116,11 @@ These domains have clear data formats and the highest demand.
 | **Physics** | Oscilloscopes, laser systems | HDF5, ROOT, CSV |
 | **Environmental Science** | Weather stations, water samplers | NetCDF, CSV, GeoJSON |
 | **Robotics/AI** | Robot arms, sensors, cameras | ROS bags, video, telemetry |
-| **Computer Science/ML** | GPU clusters, experiment trackers | JSON, W&B logs, TensorBoard |
 | **Agriculture** | Soil sensors, drone imaging | GeoTIFF, CSV, multispectral |
 
 ## Domain-Specific Features
 
-### Neuroscience (current)
+### Neuroscience (built)
 
 ```
 labclaw-neuro plugin:
@@ -105,7 +168,7 @@ labclaw-genomics plugin:
 
 ```bash
 # Scaffold a new domain plugin
-labclaw plugin create my-domain
+labclaw plugin create my-domain --type domain
 
 # Structure:
 labclaw-my-domain/
@@ -170,7 +233,7 @@ This requires:
 See [plugin-development.md](plugin-development.md) for the full plugin development guide.
 
 1. Fork the repo
-2. `labclaw plugin create your-domain`
+2. `labclaw plugin create your-domain --type domain`
 3. Implement `DomainPlugin` protocol
 4. Add sample data + tests
 5. Submit PR
