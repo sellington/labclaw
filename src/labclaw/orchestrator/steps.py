@@ -19,6 +19,9 @@ from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
+from labclaw.discovery.hypothesis import HypothesisOutput
+from labclaw.discovery.mining import PatternRecord
+
 
 def _sync_llm_complete(provider: Any, prompt: str, system: str) -> str:
     """Call an async LLM provider from sync context. Handles event-loop bridging."""
@@ -64,8 +67,8 @@ class StepContext(BaseModel):
     """Passed through the pipeline, accumulating results."""
 
     data_rows: list[dict[str, Any]] = Field(default_factory=list)
-    patterns: list[Any] = Field(default_factory=list)
-    hypotheses: list[Any] = Field(default_factory=list)
+    patterns: list[PatternRecord | dict] = Field(default_factory=list)
+    hypotheses: list[HypothesisOutput | dict] = Field(default_factory=list)
     predictions: dict[str, Any] = Field(default_factory=dict)
     proposals: list[Any] = Field(default_factory=list)
     analysis_results: dict[str, Any] = Field(default_factory=dict)
