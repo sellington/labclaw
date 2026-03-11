@@ -182,7 +182,7 @@ class ObserveStep:
                     # Also evaluate plugin sentinel rules against actual data columns.
                     # Compute column-level mean values for numeric columns so rules
                     # like "baseline_fluorescence < 100" can fire.
-                    sentinel_metric_names = {r.metric_name for r in self._sentinel._rules}
+                    sentinel_metric_names = self._sentinel.rule_metric_names
                     for col in numeric_cols:
                         if col not in sentinel_metric_names:
                             continue

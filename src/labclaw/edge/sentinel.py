@@ -84,6 +84,11 @@ class Sentinel:
         self._alerts: list[QualityAlert] = []
         self._summaries: dict[str, SessionQualitySummary] = {}
 
+    @property
+    def rule_metric_names(self) -> set[str]:
+        """Return the set of metric names referenced by all rules."""
+        return {r.metric_name for r in self._rules}
+
     def add_rule(self, rule: AlertRule) -> None:
         """Add a monitoring rule."""
         self._rules.append(rule)
