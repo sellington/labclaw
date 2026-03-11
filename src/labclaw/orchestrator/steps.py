@@ -50,10 +50,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
 class StepName(StrEnum):
     OBSERVE = "observe"
     ASK = "ask"

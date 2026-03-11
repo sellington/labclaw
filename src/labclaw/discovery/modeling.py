@@ -14,14 +14,14 @@ quantify uncertainty and feature importance for each target variable.
 from __future__ import annotations
 
 import logging
-import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 import numpy as np
 from pydantic import BaseModel, Field
 
 from labclaw.core.events import event_registry
+from labclaw.core.schemas import _now, _uuid
 
 try:
     from sklearn.ensemble import RandomForestRegressor  # pragma: no cover
@@ -52,14 +52,6 @@ for _evt in _MODELING_EVENTS:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------

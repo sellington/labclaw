@@ -6,8 +6,7 @@ Design doc: section 4 (Lab Knowledge Graph)
 
 from __future__ import annotations
 
-import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -20,19 +19,13 @@ from labclaw.core.schemas import (
     HypothesisStatus,
     MemberRole,
     QualityLevel,
+    _now,
+    _uuid,
 )
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------

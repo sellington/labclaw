@@ -5,21 +5,12 @@ Spec: docs/specs/L5-evolution.md
 
 from __future__ import annotations
 
-import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-from labclaw.core.schemas import EvolutionStage, EvolutionTarget
-
-
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
+from labclaw.core.schemas import EvolutionStage, EvolutionTarget, _now, _uuid
 
 
 class FitnessScore(BaseModel):

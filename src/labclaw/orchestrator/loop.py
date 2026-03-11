@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import logging
 import time
-import uuid
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from labclaw.core.events import event_registry
+from labclaw.core.schemas import _uuid
 from labclaw.orchestrator.steps import (
     AnalyzeStep,
     AskStep,
@@ -53,10 +53,6 @@ for _evt in _ORCHESTRATOR_EVENTS:
 # ---------------------------------------------------------------------------
 # Result model
 # ---------------------------------------------------------------------------
-
-
-def _uuid() -> str:
-    return str(uuid.uuid4())
 
 
 class CycleResult(BaseModel):

@@ -11,12 +11,12 @@ This is Layer 1 of the two-layer safety system; hardware safety is Layer 2.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
 from labclaw.core.events import event_registry
-from labclaw.core.schemas import SafetyLevel
+from labclaw.core.schemas import SafetyLevel, _now
 from labclaw.optimization.optimizer import ExperimentProposal
 
 logger = logging.getLogger(__name__)
@@ -25,10 +25,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------

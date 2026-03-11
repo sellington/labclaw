@@ -10,12 +10,12 @@ The PI (or designated approver) can approve or reject with reason.
 from __future__ import annotations
 
 import logging
-import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
 from labclaw.core.events import event_registry
+from labclaw.core.schemas import _now, _uuid
 from labclaw.hardware.schemas import SafetyCheckResult
 from labclaw.optimization.optimizer import ExperimentProposal
 from labclaw.optimization.safety import ScientificSafetyCheck
@@ -26,14 +26,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------

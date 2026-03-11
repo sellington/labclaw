@@ -6,22 +6,13 @@ Design doc: section 3.1 (Hardware Layer)
 
 from __future__ import annotations
 
-import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-from labclaw.core.schemas import DeviceInterfaceType, DeviceStatus, SafetyLevel
-
-
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
+from labclaw.core.schemas import DeviceInterfaceType, DeviceStatus, SafetyLevel, _now, _uuid
 
 
 class DeviceCapabilities(BaseModel):

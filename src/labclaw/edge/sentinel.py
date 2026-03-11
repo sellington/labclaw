@@ -10,14 +10,13 @@ when quality degrades below configured thresholds.
 from __future__ import annotations
 
 import logging
-import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
 from labclaw.core.events import event_registry
-from labclaw.core.schemas import QualityLevel, QualityMetric
+from labclaw.core.schemas import QualityLevel, QualityMetric, _now, _uuid
 
 logger = logging.getLogger(__name__)
 
@@ -38,14 +37,6 @@ for _evt in _EVENTS:
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
-
-
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 class AlertRule(BaseModel):

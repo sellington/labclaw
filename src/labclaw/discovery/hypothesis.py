@@ -16,13 +16,11 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
-from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
 from labclaw.core.events import event_registry
-from labclaw.core.schemas import HypothesisStatus
+from labclaw.core.schemas import HypothesisStatus, _uuid
 from labclaw.discovery.mining import PatternRecord
 from labclaw.llm.provider import LLMProvider
 
@@ -32,14 +30,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------
