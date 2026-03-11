@@ -831,6 +831,35 @@ class TestConcludeStep:
         assert finding_dict["pattern_type"] == "correlation"
 
     @pytest.mark.asyncio
+    async def test_session_memory_persists_dedup_keys_for_all_patterns(self):
+        """Dedup keys are stored for ALL patterns, even those beyond rendered findings."""
+        from unittest.mock import AsyncMock
+
+        from labclaw.discovery.mining import PatternRecord
+
+        mock_memory = AsyncMock()
+        mock_memory.store_finding.return_value = "finding-1"
+        # Create more patterns than ConcludeStep will render as findings text
+        patterns = [
+            PatternRecord(
+                pattern_type="correlation",
+                description=f"pattern {i}",
+                evidence={"col_a": f"a{i}", "col_b": f"b{i}", "r": 0.8},
+            )
+            for i in range(5)
+        ]
+        ctx = StepContext(patterns=patterns)
+        step = ConcludeStep(session_memory=mock_memory)
+        result = await step.run(ctx)
+        assert result.success is True
+        # All 5 patterns should have dedup keys persisted
+        stored = mock_memory.store_finding.call_args_list
+        pattern_types = [
+            call[0][0].get("pattern_type") for call in stored
+        ]
+        assert pattern_types.count("correlation") >= 5
+
+    @pytest.mark.asyncio
     async def test_session_memory_failure_does_not_crash(self):
         """When store_finding raises, ConcludeStep still succeeds."""
         from unittest.mock import AsyncMock

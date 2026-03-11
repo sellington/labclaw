@@ -944,6 +944,27 @@ class ConcludeStep:
                     except Exception:
                         logger.warning("Failed to persist finding to session memory")
 
+                # Persist dedup keys for ALL patterns, not just those matching
+                # findings text. Without this, patterns beyond len(findings) are
+                # treated as new on the next cycle.
+                patterns = context.patterns or []
+                for pattern in patterns[len(findings):]:
+                    try:
+                        evidence = getattr(pattern, "evidence", {})
+                        record: dict[str, Any] = {
+                            "cycle_id": context.cycle_id,
+                            "pattern_count": len(patterns),
+                        }
+                        if isinstance(evidence, dict):
+                            record["column_a"] = evidence.get("col_a")
+                            record["column_b"] = evidence.get("col_b")
+                        record["pattern_type"] = getattr(
+                            pattern, "pattern_type", None
+                        )
+                        await self._session_memory.store_finding(record)
+                    except Exception:
+                        logger.warning("Failed to persist pattern dedup key")
+
             ctx = context.model_copy(
                 update={
                     "findings": findings,
