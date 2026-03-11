@@ -223,11 +223,16 @@ def test_get_tier_b_backend_returns_singleton() -> None:
 
     reset_all()
     try:
-        with patch("labclaw.memory.knowledge_graph.create_tier_b_backend") as mock_factory:
+        mock_cfg = MagicMock()
+        mock_cfg.memory.tier_b_db_path = "data/knowledge_graph.db"
+        with (
+            patch("labclaw.config.load_config", return_value=mock_cfg),
+            patch("labclaw.memory.knowledge_graph.create_tier_b_backend") as mock_factory,
+        ):
             mock_factory.return_value = MagicMock()
             first = get_tier_b_backend()
             second = get_tier_b_backend()
             assert first is second
-            mock_factory.assert_called_once()
+            mock_factory.assert_called_once_with(db_path="data/knowledge_graph.db")
     finally:
         reset_all()

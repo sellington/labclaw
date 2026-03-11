@@ -90,9 +90,12 @@ def get_tier_a_backend() -> TierABackend:
 @lru_cache
 def get_tier_b_backend() -> TierBBackend | SQLiteTierBBackend:
     """Return process-wide KG backend (SQLite-backed for persistence)."""
+    from labclaw.config import load_config
     from labclaw.memory.knowledge_graph import create_tier_b_backend
 
-    return create_tier_b_backend()
+    cfg = load_config()
+    db_path = getattr(cfg.memory, "tier_b_db_path", None)
+    return create_tier_b_backend(db_path=db_path) if db_path else create_tier_b_backend()
 
 
 @lru_cache
