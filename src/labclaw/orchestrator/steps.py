@@ -539,11 +539,11 @@ class PredictStep:
 
 
 class ExperimentStep:
-    """Wraps BayesianOptimizer — proposes next experiment parameters.
+    """Wraps RandomSamplingOptimizer — proposes next experiment parameters.
 
-    When *llm_provider* is supplied, Bayesian proposals are evaluated by the
-    LLM against domain knowledge and past findings.  The LLM can annotate
-    proposals with scientific rationale.  Bayesian math is never replaced.
+    When *llm_provider* is supplied, proposals are evaluated by the LLM
+    against domain knowledge and past findings.  The LLM can annotate
+    proposals with scientific rationale.  Optimization math is never replaced.
     """
 
     name = StepName.EXPERIMENT
