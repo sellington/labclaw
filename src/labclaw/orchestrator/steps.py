@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import time
-import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -19,6 +18,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
+from labclaw.core.schemas import _uuid
 from labclaw.discovery.hypothesis import HypothesisOutput
 from labclaw.discovery.mining import PatternRecord
 
@@ -155,7 +155,7 @@ class ObserveStep:
 
             prov_entry: dict[str, Any] = {
                 "step": self.name.value,
-                "node_id": str(uuid.uuid4()),
+                "node_id": _uuid(),
                 "node_type": "observation",
                 "inputs": [],
                 "outputs": [f"{row_count} rows, {len(all_keys)} columns"],
@@ -316,7 +316,7 @@ class AskStep:
 
             prov_entry: dict[str, Any] = {
                 "step": self.name.value,
-                "node_id": str(uuid.uuid4()),
+                "node_id": _uuid(),
                 "node_type": "pattern_mining",
                 "inputs": [f"{len(context.data_rows)} rows"],
                 "outputs": [f"{len(patterns)} patterns"],
@@ -419,7 +419,7 @@ class HypothesizeStep:
 
             prov_entry: dict[str, Any] = {
                 "step": self.name.value,
-                "node_id": str(uuid.uuid4()),
+                "node_id": _uuid(),
                 "node_type": "hypothesis_generation",
                 "inputs": [f"{len(context.patterns)} patterns"],
                 "outputs": [f"{len(hypotheses)} hypotheses"],
@@ -508,7 +508,7 @@ class PredictStep:
 
             prov_entry: dict[str, Any] = {
                 "step": self.name.value,
-                "node_id": str(uuid.uuid4()),
+                "node_id": _uuid(),
                 "node_type": "predictive_model",
                 "inputs": [f"target={target_col}", f"features={feature_cols}"],
                 "outputs": [f"r_squared={train_result.r_squared:.3f}"],
@@ -621,7 +621,7 @@ class ExperimentStep:
 
             prov_entry: dict[str, Any] = {
                 "step": self.name.value,
-                "node_id": str(uuid.uuid4()),
+                "node_id": _uuid(),
                 "node_type": "experiment_proposal",
                 "inputs": [f"space={space.name}", f"dims={len(dimensions)}"],
                 "outputs": [f"{len(proposals)} proposals"],
@@ -754,7 +754,7 @@ class AnalyzeStep:
 
             prov_entry: dict[str, Any] = {
                 "step": self.name.value,
-                "node_id": str(uuid.uuid4()),
+                "node_id": _uuid(),
                 "node_type": "statistical_analysis",
                 "inputs": [f"{len(context.patterns)} patterns"],
                 "outputs": [f"{len(analysis['validated_patterns'])} validated"],
@@ -873,7 +873,7 @@ class ConcludeStep:
             tracker = ProvenanceTracker()
             finding_chains: list[dict[str, Any]] = []
             for finding_text in findings:
-                finding_id = str(uuid.uuid4())
+                finding_id = _uuid()
                 prov_steps = [
                     ProvenanceStep(
                         node_id=entry["node_id"],
@@ -886,7 +886,7 @@ class ConcludeStep:
                 # Always add a conclude step entry
                 prov_steps.append(
                     ProvenanceStep(
-                        node_id=str(uuid.uuid4()),
+                        node_id=_uuid(),
                         node_type="conclusion",
                         description=finding_text,
                     )
@@ -896,7 +896,7 @@ class ConcludeStep:
 
             conclude_prov: dict[str, Any] = {
                 "step": self.name.value,
-                "node_id": str(uuid.uuid4()),
+                "node_id": _uuid(),
                 "node_type": "conclusion",
                 "inputs": [f"{len(context.patterns)} patterns", f"{len(context.hypotheses)} hyp"],
                 "outputs": [f"{len(findings)} findings"],
