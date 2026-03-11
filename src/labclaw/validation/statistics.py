@@ -9,13 +9,12 @@ from __future__ import annotations
 import logging
 import math
 import random
-import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
 from labclaw.core.events import event_registry
-from labclaw.core.schemas import HypothesisStatus
+from labclaw.core.schemas import HypothesisStatus, _now, _uuid
 
 try:
     from scipy import stats as scipy_stats
@@ -28,14 +27,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------

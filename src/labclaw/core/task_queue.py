@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -19,6 +18,7 @@ import aiosqlite
 from pydantic import BaseModel, Field
 
 from labclaw.core.events import event_registry
+from labclaw.core.schemas import _now, _uuid
 
 logger = logging.getLogger(__name__)
 
@@ -49,14 +49,6 @@ class TaskStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
-
-
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 class TaskItem(BaseModel):

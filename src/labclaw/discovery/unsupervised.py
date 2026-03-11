@@ -15,8 +15,6 @@ from __future__ import annotations
 
 import logging
 import random
-import uuid
-from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -52,14 +50,6 @@ for _evt in _UNSUPERVISED_EVENTS:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------

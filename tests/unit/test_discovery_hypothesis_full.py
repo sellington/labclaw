@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from labclaw.core.schemas import _now
 from labclaw.discovery.hypothesis import (
     HypothesisGenerator,
     HypothesisInput,
@@ -22,7 +23,6 @@ from labclaw.discovery.hypothesis import (
     LLMHypothesisGenerator,
     _LLMHypothesisItem,
     _LLMHypothesisResponse,
-    _now,
 )
 from labclaw.discovery.mining import PatternRecord
 

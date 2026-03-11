@@ -14,8 +14,13 @@ import threading
 import time
 from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, Request, status
+
+if TYPE_CHECKING:
+    from labclaw.memory.knowledge_graph import TierBBackend
+    from labclaw.memory.sqlite_backend import SQLiteTierBBackend
 
 from labclaw.core.events import event_registry
 from labclaw.core.governance import GovernanceEngine, SafetyLevel
@@ -80,6 +85,17 @@ def get_device_registry() -> DeviceRegistry:
 @lru_cache
 def get_tier_a_backend() -> TierABackend:
     return TierABackend(root=_default_memory_root())
+
+
+@lru_cache
+def get_tier_b_backend() -> TierBBackend | SQLiteTierBBackend:
+    """Return process-wide KG backend (SQLite-backed for persistence)."""
+    from labclaw.config import load_config
+    from labclaw.memory.knowledge_graph import create_tier_b_backend
+
+    cfg = load_config()
+    db_path = getattr(cfg.memory, "tier_b_db_path", None)
+    return create_tier_b_backend(db_path=db_path) if db_path else create_tier_b_backend()
 
 
 @lru_cache
@@ -349,6 +365,7 @@ def reset_all() -> None:
     for fn in (
         get_device_registry,
         get_tier_a_backend,
+        get_tier_b_backend,
         get_session_chronicle,
         get_pattern_miner,
         get_hypothesis_generator,

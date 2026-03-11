@@ -11,13 +11,16 @@ from __future__ import annotations
 
 import logging
 import time
-import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
+
+from labclaw.core.schemas import _uuid
+from labclaw.discovery.hypothesis import HypothesisOutput
+from labclaw.discovery.mining import PatternRecord
 
 
 def _sync_llm_complete(provider: Any, prompt: str, system: str) -> str:
@@ -50,10 +53,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
 class StepName(StrEnum):
     OBSERVE = "observe"
     ASK = "ask"
@@ -68,8 +67,8 @@ class StepContext(BaseModel):
     """Passed through the pipeline, accumulating results."""
 
     data_rows: list[dict[str, Any]] = Field(default_factory=list)
-    patterns: list[Any] = Field(default_factory=list)
-    hypotheses: list[Any] = Field(default_factory=list)
+    patterns: list[PatternRecord | dict] = Field(default_factory=list)
+    hypotheses: list[HypothesisOutput | dict] = Field(default_factory=list)
     predictions: dict[str, Any] = Field(default_factory=dict)
     proposals: list[Any] = Field(default_factory=list)
     analysis_results: dict[str, Any] = Field(default_factory=dict)
@@ -156,7 +155,7 @@ class ObserveStep:
 
             prov_entry: dict[str, Any] = {
                 "step": self.name.value,
-                "node_id": str(uuid.uuid4()),
+                "node_id": _uuid(),
                 "node_type": "observation",
                 "inputs": [],
                 "outputs": [f"{row_count} rows, {len(all_keys)} columns"],
@@ -180,6 +179,23 @@ class ObserveStep:
                         ),
                         QualityMetric(name="numeric_column_count", value=float(len(numeric_cols))),
                     ]
+                    # Also evaluate plugin sentinel rules against actual data columns.
+                    # Compute column-level mean values for numeric columns so rules
+                    # like "baseline_fluorescence < 100" can fire.
+                    sentinel_metric_names = self._sentinel.rule_metric_names
+                    for col in numeric_cols:
+                        if col not in sentinel_metric_names:
+                            continue
+                        col_vals = [
+                            float(row[col])
+                            for row in rows
+                            if col in row
+                            and isinstance(row[col], (int, float))
+                            and not isinstance(row[col], bool)
+                        ]
+                        if col_vals:
+                            mean_val = sum(col_vals) / len(col_vals)
+                            metrics.append(QualityMetric(name=col, value=mean_val))
                     for metric in metrics:
                         alerts = self._sentinel.check_metric(metric)
                         for alert in alerts:
@@ -300,7 +316,7 @@ class AskStep:
 
             prov_entry: dict[str, Any] = {
                 "step": self.name.value,
-                "node_id": str(uuid.uuid4()),
+                "node_id": _uuid(),
                 "node_type": "pattern_mining",
                 "inputs": [f"{len(context.data_rows)} rows"],
                 "outputs": [f"{len(patterns)} patterns"],
@@ -403,7 +419,7 @@ class HypothesizeStep:
 
             prov_entry: dict[str, Any] = {
                 "step": self.name.value,
-                "node_id": str(uuid.uuid4()),
+                "node_id": _uuid(),
                 "node_type": "hypothesis_generation",
                 "inputs": [f"{len(context.patterns)} patterns"],
                 "outputs": [f"{len(hypotheses)} hypotheses"],
@@ -492,7 +508,7 @@ class PredictStep:
 
             prov_entry: dict[str, Any] = {
                 "step": self.name.value,
-                "node_id": str(uuid.uuid4()),
+                "node_id": _uuid(),
                 "node_type": "predictive_model",
                 "inputs": [f"target={target_col}", f"features={feature_cols}"],
                 "outputs": [f"r_squared={train_result.r_squared:.3f}"],
@@ -523,11 +539,11 @@ class PredictStep:
 
 
 class ExperimentStep:
-    """Wraps BayesianOptimizer — proposes next experiment parameters.
+    """Wraps RandomSamplingOptimizer — proposes next experiment parameters.
 
-    When *llm_provider* is supplied, Bayesian proposals are evaluated by the
-    LLM against domain knowledge and past findings.  The LLM can annotate
-    proposals with scientific rationale.  Bayesian math is never replaced.
+    When *llm_provider* is supplied, proposals are evaluated by the LLM
+    against domain knowledge and past findings.  The LLM can annotate
+    proposals with scientific rationale.  Optimization math is never replaced.
     """
 
     name = StepName.EXPERIMENT
@@ -605,7 +621,7 @@ class ExperimentStep:
 
             prov_entry: dict[str, Any] = {
                 "step": self.name.value,
-                "node_id": str(uuid.uuid4()),
+                "node_id": _uuid(),
                 "node_type": "experiment_proposal",
                 "inputs": [f"space={space.name}", f"dims={len(dimensions)}"],
                 "outputs": [f"{len(proposals)} proposals"],
@@ -738,7 +754,7 @@ class AnalyzeStep:
 
             prov_entry: dict[str, Any] = {
                 "step": self.name.value,
-                "node_id": str(uuid.uuid4()),
+                "node_id": _uuid(),
                 "node_type": "statistical_analysis",
                 "inputs": [f"{len(context.patterns)} patterns"],
                 "outputs": [f"{len(analysis['validated_patterns'])} validated"],
@@ -787,12 +803,14 @@ class ConcludeStep:
         entity_id: str = "lab",
         llm_provider: Any | None = None,
         max_llm_calls: int = 50,
+        session_memory: Any | None = None,
     ) -> None:
         self._memory_root = memory_root
         self._entity_id = entity_id
         self._llm_provider = llm_provider
         self._max_llm_calls = max_llm_calls
         self._llm_call_count = 0
+        self._session_memory = session_memory
 
     async def run(self, context: StepContext) -> StepResult:
         t0 = time.monotonic()
@@ -855,7 +873,7 @@ class ConcludeStep:
             tracker = ProvenanceTracker()
             finding_chains: list[dict[str, Any]] = []
             for finding_text in findings:
-                finding_id = str(uuid.uuid4())
+                finding_id = _uuid()
                 prov_steps = [
                     ProvenanceStep(
                         node_id=entry["node_id"],
@@ -868,7 +886,7 @@ class ConcludeStep:
                 # Always add a conclude step entry
                 prov_steps.append(
                     ProvenanceStep(
-                        node_id=str(uuid.uuid4()),
+                        node_id=_uuid(),
                         node_type="conclusion",
                         description=finding_text,
                     )
@@ -878,7 +896,7 @@ class ConcludeStep:
 
             conclude_prov: dict[str, Any] = {
                 "step": self.name.value,
-                "node_id": str(uuid.uuid4()),
+                "node_id": _uuid(),
                 "node_type": "conclusion",
                 "inputs": [f"{len(context.patterns)} patterns", f"{len(context.hypotheses)} hyp"],
                 "outputs": [f"{len(findings)} findings"],
@@ -899,6 +917,53 @@ class ConcludeStep:
                     backend.append_memory(self._entity_id, entry)
                 except Exception:
                     logger.exception("Failed to log findings to Tier A memory")
+
+            # Persist findings to SessionMemoryManager for cross-session retrieval
+            if self._session_memory is not None:
+                for i, finding_text in enumerate(findings):
+                    try:
+                        finding_dict: dict[str, Any] = {
+                            "description": finding_text,
+                            "cycle_id": context.cycle_id,
+                            "pattern_count": len(context.patterns),
+                        }
+                        if i < len(finding_chains):
+                            finding_dict["provenance"] = finding_chains[i]
+                        # Include pattern dedup keys so PatternDeduplicator
+                        # can match on column_a, column_b, pattern_type
+                        if i < len(context.patterns):
+                            pattern = context.patterns[i]
+                            evidence = getattr(pattern, "evidence", {})
+                            if isinstance(evidence, dict):
+                                finding_dict["column_a"] = evidence.get("col_a")
+                                finding_dict["column_b"] = evidence.get("col_b")
+                            finding_dict["pattern_type"] = getattr(
+                                pattern, "pattern_type", None
+                            )
+                        await self._session_memory.store_finding(finding_dict)
+                    except Exception:
+                        logger.warning("Failed to persist finding to session memory")
+
+                # Persist dedup keys for ALL patterns, not just those matching
+                # findings text. Without this, patterns beyond len(findings) are
+                # treated as new on the next cycle.
+                patterns = context.patterns or []
+                for pattern in patterns[len(findings):]:
+                    try:
+                        evidence = getattr(pattern, "evidence", {})
+                        record: dict[str, Any] = {
+                            "cycle_id": context.cycle_id,
+                            "pattern_count": len(patterns),
+                        }
+                        if isinstance(evidence, dict):
+                            record["column_a"] = evidence.get("col_a")
+                            record["column_b"] = evidence.get("col_b")
+                        record["pattern_type"] = getattr(
+                            pattern, "pattern_type", None
+                        )
+                        await self._session_memory.store_finding(record)
+                    except Exception:
+                        logger.warning("Failed to persist pattern dedup key")
 
             ctx = context.model_copy(
                 update={

@@ -10,14 +10,13 @@ when quality degrades below configured thresholds.
 from __future__ import annotations
 
 import logging
-import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
 from labclaw.core.events import event_registry
-from labclaw.core.schemas import QualityLevel, QualityMetric
+from labclaw.core.schemas import QualityLevel, QualityMetric, _now, _uuid
 
 logger = logging.getLogger(__name__)
 
@@ -40,21 +39,13 @@ for _evt in _EVENTS:
 # ---------------------------------------------------------------------------
 
 
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
-
-
 class AlertRule(BaseModel):
     """A rule that triggers an alert when quality degrades."""
 
     name: str
     metric_name: str
     threshold: float
-    comparison: str = "below"  # "below" or "above"
+    comparison: str = "below"  # "below", "above", "equal", or "not_equal"
     level: QualityLevel = QualityLevel.WARNING
 
 
@@ -93,6 +84,11 @@ class Sentinel:
         self._alerts: list[QualityAlert] = []
         self._summaries: dict[str, SessionQualitySummary] = {}
 
+    @property
+    def rule_metric_names(self) -> set[str]:
+        """Return the set of metric names referenced by all rules."""
+        return {r.metric_name for r in self._rules}
+
     def add_rule(self, rule: AlertRule) -> None:
         """Add a monitoring rule."""
         self._rules.append(rule)
@@ -111,6 +107,10 @@ class Sentinel:
             if rule.comparison == "below" and metric.value < rule.threshold:
                 fired = True
             elif rule.comparison == "above" and metric.value > rule.threshold:
+                fired = True
+            elif rule.comparison == "equal" and metric.value == rule.threshold:
+                fired = True
+            elif rule.comparison == "not_equal" and metric.value != rule.threshold:
                 fired = True
 
             if fired:

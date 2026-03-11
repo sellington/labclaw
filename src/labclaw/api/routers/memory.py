@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -9,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from labclaw.api.deps import get_tier_a_backend
+from labclaw.api.deps import get_tier_a_backend, get_tier_b_backend
 from labclaw.memory.markdown import MemoryEntry, SearchResult, TierABackend
 
 router = APIRouter()
@@ -135,6 +136,21 @@ async def list_findings(
 # Knowledge Graph (Tier B) endpoints
 # ---------------------------------------------------------------------------
 
+_kg_init_lock = asyncio.Lock()
+_kg_initialized = False
+
+
+async def _ensure_kg_initialized(backend: object) -> None:
+    """Serialize KG backend initialization so concurrent cold-start requests
+    do not call ``init_db()`` twice and leak connections."""
+    global _kg_initialized
+    if _kg_initialized:
+        return
+    async with _kg_init_lock:
+        if not _kg_initialized:  # double-check after acquiring lock
+            await backend.init_db()  # type: ignore[attr-defined]
+            _kg_initialized = True
+
 
 @router.get("/kg/nodes")
 async def list_kg_nodes(
@@ -143,14 +159,15 @@ async def list_kg_nodes(
     limit: int = Query(default=50, ge=1, le=500),
 ) -> list[dict[str, Any]]:
     """List nodes in the knowledge graph with optional type/label filtering."""
-    from labclaw.memory.knowledge_graph import KGQueryFilter, TierBBackend
+    from labclaw.memory.knowledge_graph import KGQueryFilter
 
-    kg = TierBBackend()
+    kg = get_tier_b_backend()
+    await _ensure_kg_initialized(kg)
     filt = KGQueryFilter(
         node_type=node_type or None,
         tags=[label] if label else [],
     )
-    nodes = kg.query_nodes(filt)
+    nodes = await kg.query_nodes(filt)
     return [n.model_dump(mode="json") for n in nodes[:limit]]
 
 
@@ -162,13 +179,15 @@ async def get_kg_neighbors(
     limit: int = Query(default=50, ge=1, le=500),
 ) -> list[dict[str, Any]]:
     """Get neighbor nodes for a given node in the knowledge graph."""
-    from labclaw.memory.knowledge_graph import TierBBackend
-
-    kg = TierBBackend()
-    node = kg.get_node(node_id)
+    kg = get_tier_b_backend()
+    await _ensure_kg_initialized(kg)
+    try:
+        node = await kg.get_node(node_id)
+    except KeyError:
+        node = None
     if node is None:
         raise HTTPException(status_code=404, detail=f"Node {node_id!r} not found")
-    neighbors = kg.get_neighbors(
+    neighbors = await kg.get_neighbors(
         node_id,
         relation=relation or None,
         direction=direction,

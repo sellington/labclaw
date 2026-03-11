@@ -98,6 +98,15 @@ class EventRegistry:
             if handlers and handler in handlers:
                 handlers.remove(handler)
 
+    def get_handlers(self, name: str) -> list[Callable[[LabEvent], None]]:
+        """Return a snapshot of handlers registered for *name*.
+
+        Thread-safe: copies the handler list under lock so callers can
+        iterate without holding the lock and without risk of deadlock.
+        """
+        with self._lock:
+            return list(self._handlers.get(name, []))
+
     def get_schema(self, name: str) -> type[LabEvent] | None:
         return self._schemas.get(name)
 

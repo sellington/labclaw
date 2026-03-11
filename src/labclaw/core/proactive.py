@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import fnmatch
 import logging
-import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
@@ -19,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from labclaw.core.event_bus import EventBus
 from labclaw.core.events import event_registry
-from labclaw.core.schemas import LabEvent
+from labclaw.core.schemas import LabEvent, _uuid
 from labclaw.core.task_queue import TaskItem, TaskQueue
 
 logger = logging.getLogger(__name__)
@@ -46,10 +45,6 @@ class CommitmentStatus(StrEnum):
     PENDING = "pending"
     FULFILLED = "fulfilled"
     OVERDUE = "overdue"
-
-
-def _uuid() -> str:
-    return str(uuid.uuid4())
 
 
 class Trigger(BaseModel):

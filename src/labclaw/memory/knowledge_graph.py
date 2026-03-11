@@ -13,8 +13,7 @@ Designed as a drop-in replacement interface for future Graphiti backend.
 from __future__ import annotations
 
 import logging
-import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from labclaw.core.events import event_registry
 from labclaw.core.graph import GraphNode
+from labclaw.core.schemas import _now, _uuid
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +47,6 @@ for _evt in _KG_EVENTS:
 # ---------------------------------------------------------------------------
 # Pydantic schemas
 # ---------------------------------------------------------------------------
-
-
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 class KGEdge(BaseModel):

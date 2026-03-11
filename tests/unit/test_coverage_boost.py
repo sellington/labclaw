@@ -210,3 +210,29 @@ class TestFitnessTrackerFromDict:
         """from_dict with empty dict returns empty tracker."""
         tracker = FitnessTracker.from_dict({})
         assert tracker.get_history(EvolutionTarget.PROMPTS) == []
+
+
+# ---------------------------------------------------------------------------
+# api/deps.py — get_tier_b_backend singleton
+# ---------------------------------------------------------------------------
+
+
+def test_get_tier_b_backend_returns_singleton() -> None:
+    """get_tier_b_backend returns a cached KG backend instance."""
+    from labclaw.api.deps import get_tier_b_backend, reset_all
+
+    reset_all()
+    try:
+        mock_cfg = MagicMock()
+        mock_cfg.memory.tier_b_db_path = "data/knowledge_graph.db"
+        with (
+            patch("labclaw.config.load_config", return_value=mock_cfg),
+            patch("labclaw.memory.knowledge_graph.create_tier_b_backend") as mock_factory,
+        ):
+            mock_factory.return_value = MagicMock()
+            first = get_tier_b_backend()
+            second = get_tier_b_backend()
+            assert first is second
+            mock_factory.assert_called_once_with(db_path="data/knowledge_graph.db")
+    finally:
+        reset_all()

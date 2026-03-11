@@ -14,6 +14,7 @@ from labclaw.optimization.optimizer import (
     OptimizationResult,
     ParameterDimension,
     ParameterSpace,
+    RandomSamplingOptimizer,
 )
 from labclaw.optimization.proposal import ExperimentPipeline
 from labclaw.optimization.safety import (
@@ -27,6 +28,7 @@ __all__ = [
     "ApprovalGate",
     "ApprovalRequest",
     "BayesianOptimizer",
+    "RandomSamplingOptimizer",
     "ExperimentPipeline",
     "ExperimentProposal",
     "OptimizationResult",

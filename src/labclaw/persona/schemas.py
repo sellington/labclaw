@@ -5,21 +5,12 @@ Spec: docs/specs/L5-persona.md
 
 from __future__ import annotations
 
-import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from labclaw.core.schemas import MemberRole
-
-
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
+from labclaw.core.schemas import MemberRole, _now, _uuid
 
 
 class MemberProfile(BaseModel):

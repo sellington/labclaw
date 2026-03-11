@@ -375,21 +375,37 @@ class LabClawDaemon:
             # Collect plugin contributions
             sentinel, plugin_templates = self._collect_plugin_contributions()
 
-            loop = ScientificLoop(
-                steps=[
-                    ObserveStep(sentinel=sentinel),
-                    AskStep(),
-                    HypothesizeStep(
-                        llm_provider=llm,
-                        plugin_templates=plugin_templates,
-                    ),
-                    PredictStep(),
-                    ExperimentStep(),
-                    AnalyzeStep(),
-                    ConcludeStep(),
-                ]
-            )
-            result = asyncio.run(loop.run_cycle(rows))
+            # Create shared session memory for finding persistence + dedup
+            from labclaw.memory.session_memory import SessionMemoryManager
+
+            session_memory = SessionMemoryManager(memory_root=self.memory_root)
+
+            async def _run_cycle() -> object:
+                await session_memory.init()
+                try:
+                    sci_loop = ScientificLoop(
+                        steps=[
+                            ObserveStep(sentinel=sentinel),
+                            AskStep(session_memory=session_memory),
+                            HypothesizeStep(
+                                llm_provider=llm,
+                                plugin_templates=plugin_templates,
+                                session_memory=session_memory,
+                            ),
+                            PredictStep(),
+                            ExperimentStep(),
+                            AnalyzeStep(),
+                            ConcludeStep(
+                                memory_root=self.memory_root,
+                                session_memory=session_memory,
+                            ),
+                        ]
+                    )
+                    return await sci_loop.run_cycle(rows)
+                finally:
+                    await session_memory.close()
+
+            result = asyncio.run(_run_cycle())
 
             self._discovery_count += 1
             logger.info(

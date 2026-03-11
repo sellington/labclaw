@@ -29,20 +29,48 @@ class EventBus:
     def publish(self, event: LabEvent) -> None:
         """Publish an event to all matching subscribers.
 
+        Dispatches to EventRegistry handlers first (so handlers registered
+        on the registry also receive events published via the bus), then
+        delivers to bus-local subscribers.  Handlers registered on both
+        are deduplicated by identity to prevent double-dispatch.
+
         Args:
             event: The LabEvent to publish.
         """
         event_name = event.event_name.full
+        dispatched: set[int] = set()
 
-        # Deliver to specific-name subscribers
+        # Dispatch to EventRegistry handlers first (if event is registered)
+        if self._registry.is_registered(event_name):
+            registry_handlers = self._registry.get_handlers(event_name)
+            registry_wildcards = self._registry.get_handlers("*")
+            for handler in registry_handlers:
+                dispatched.add(id(handler))
+                try:
+                    handler(event)
+                except Exception:
+                    logger.exception("Registry handler error for event %s", event_name)
+            for handler in registry_wildcards:
+                dispatched.add(id(handler))
+                try:
+                    handler(event)
+                except Exception:
+                    logger.exception("Registry wildcard handler error for event %s", event_name)
+
+        # Deliver to bus-local specific-name subscribers (skip already dispatched)
         for handler in self._handlers.get(event_name, []):
+            if id(handler) in dispatched:
+                continue
+            dispatched.add(id(handler))
             try:
                 handler(event)
             except Exception:
                 logger.exception("Handler error for event %s", event_name)
 
-        # Deliver to wildcard subscribers
+        # Deliver to bus-local wildcard subscribers (skip already dispatched)
         for handler in self._handlers.get("*", []):
+            if id(handler) in dispatched:
+                continue
             try:
                 handler(event)
             except Exception:

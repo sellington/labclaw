@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from labclaw.core.schemas import _uuid
 from labclaw.orchestrator.steps import (
     AnalyzeStep,
     ConcludeStep,
@@ -16,7 +17,6 @@ from labclaw.orchestrator.steps import (
     PredictStep,
     StepContext,
     StepName,
-    _uuid,
 )
 
 # ---------------------------------------------------------------------------
@@ -89,8 +89,7 @@ class TestHypothesizeStepExceptionHandler:
     @pytest.mark.asyncio
     async def test_exception_returns_failure(self) -> None:
         """Force HypothesisGenerator to raise inside run()."""
-        mock_pattern = MagicMock()
-        ctx = StepContext(patterns=[mock_pattern])
+        ctx = StepContext(patterns=[{"pattern_type": "test", "description": "mock"}])
         step = HypothesizeStep(llm_provider=None)
 
         mock_gen = MagicMock()
@@ -106,7 +105,7 @@ class TestHypothesizeStepExceptionHandler:
     @pytest.mark.asyncio
     async def test_exception_no_llm_provider(self) -> None:
         """With no LLM provider, a crash in HypothesisGenerator is caught."""
-        ctx = StepContext(patterns=["some_pattern"])
+        ctx = StepContext(patterns=[{"pattern_type": "test", "description": "some_pattern"}])
         step = HypothesizeStep(llm_provider=None)
 
         mock_gen = MagicMock()
@@ -208,10 +207,7 @@ class TestAnalyzeStepExceptionHandler:
     @pytest.mark.asyncio
     async def test_exception_returns_failure(self) -> None:
         """StatisticalValidator init raises, handler catches it."""
-        mock_pattern = MagicMock()
-        mock_pattern.pattern_type = "correlation"
-        mock_pattern.pattern_id = "p1"
-        ctx = StepContext(patterns=[mock_pattern])
+        ctx = StepContext(patterns=[{"pattern_type": "correlation", "description": "test", "pattern_id": "p1"}])
 
         with patch(
             "labclaw.validation.statistics.StatisticalValidator",
@@ -226,7 +222,7 @@ class TestAnalyzeStepExceptionHandler:
     @pytest.mark.asyncio
     async def test_exception_with_model_copy_raise(self) -> None:
         """Patch model_copy at class level so exception is triggered after the loop."""
-        ctx = StepContext(patterns=[MagicMock()])
+        ctx = StepContext(patterns=[{"pattern_type": "test", "description": "mock"}])
         with patch(
             "labclaw.orchestrator.steps.StepContext.model_copy",
             side_effect=RuntimeError("bad copy"),
@@ -246,8 +242,8 @@ class TestConcludeStepExceptionHandler:
     async def test_exception_returns_failure(self) -> None:
         """Patch StepContext.model_copy at class level to trigger exception handler."""
         ctx = StepContext(
-            patterns=["p1"],
-            hypotheses=["h1"],
+            patterns=[{"pattern_type": "test"}],
+            hypotheses=[{"statement": "h1"}],
         )
         with patch(
             "labclaw.orchestrator.steps.StepContext.model_copy",
@@ -261,7 +257,7 @@ class TestConcludeStepExceptionHandler:
 
     @pytest.mark.asyncio
     async def test_exception_preserves_context(self) -> None:
-        ctx = StepContext(patterns=["p"])
+        ctx = StepContext(patterns=[{"pattern_type": "test"}])
         with patch(
             "labclaw.orchestrator.steps.StepContext.model_copy", side_effect=ValueError("bad")
         ):
@@ -271,7 +267,7 @@ class TestConcludeStepExceptionHandler:
 
     @pytest.mark.asyncio
     async def test_duration_is_non_negative_on_exception(self) -> None:
-        ctx = StepContext(patterns=["p"])
+        ctx = StepContext(patterns=[{"pattern_type": "test"}])
         with patch(
             "labclaw.orchestrator.steps.StepContext.model_copy", side_effect=RuntimeError("crash")
         ):

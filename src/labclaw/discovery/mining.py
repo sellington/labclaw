@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 import numpy as np
@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, model_validator
 from scipy import stats as scipy_stats
 
 from labclaw.core.events import event_registry
+from labclaw.core.schemas import _now
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +28,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------

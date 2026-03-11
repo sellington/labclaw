@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 
 import labclaw.discovery.unsupervised as _unsupervised_mod
+from labclaw.core.schemas import _now, _uuid
 from labclaw.discovery.unsupervised import (
     ClusterConfig,
     ClusterDiscovery,
@@ -18,8 +19,6 @@ from labclaw.discovery.unsupervised import (
     DimensionalityReducer,
     ReductionConfig,
     ReductionResult,
-    _now,
-    _uuid,
 )
 
 # ---------------------------------------------------------------------------

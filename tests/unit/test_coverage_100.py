@@ -980,6 +980,51 @@ def test_sentinel_get_alerts_filtered() -> None:
     assert filtered[0].session_id == "sess-A"
 
 
+def test_sentinel_check_metric_equal() -> None:
+    """comparison='equal' fires when value equals threshold."""
+    from labclaw.core.schemas import QualityLevel, QualityMetric
+    from labclaw.edge.sentinel import AlertRule, Sentinel
+
+    rule = AlertRule(
+        name="exact_zero",
+        metric_name="speed",
+        threshold=0.0,
+        comparison="equal",
+        level=QualityLevel.WARNING,
+    )
+    sentinel = Sentinel(rules=[rule])
+    metric = QualityMetric(name="speed", value=0.0, level=QualityLevel.GOOD, timestamp=datetime.now(UTC))
+    alerts = sentinel.check_metric(metric)
+    assert len(alerts) == 1
+    assert alerts[0].rule_name == "exact_zero"
+
+    # Non-matching value should not fire
+    metric2 = QualityMetric(name="speed", value=1.0, level=QualityLevel.GOOD, timestamp=datetime.now(UTC))
+    assert sentinel.check_metric(metric2) == []
+
+
+def test_sentinel_check_metric_not_equal() -> None:
+    """comparison='not_equal' fires when value differs from threshold."""
+    from labclaw.core.schemas import QualityLevel, QualityMetric
+    from labclaw.edge.sentinel import AlertRule, Sentinel
+
+    rule = AlertRule(
+        name="nonzero",
+        metric_name="speed",
+        threshold=0.0,
+        comparison="not_equal",
+        level=QualityLevel.WARNING,
+    )
+    sentinel = Sentinel(rules=[rule])
+    metric = QualityMetric(name="speed", value=5.0, level=QualityLevel.GOOD, timestamp=datetime.now(UTC))
+    alerts = sentinel.check_metric(metric)
+    assert len(alerts) == 1
+
+    # Matching value should not fire
+    metric2 = QualityMetric(name="speed", value=0.0, level=QualityLevel.GOOD, timestamp=datetime.now(UTC))
+    assert sentinel.check_metric(metric2) == []
+
+
 # ---------------------------------------------------------------------------
 # edge/session_chronicle.py
 # ---------------------------------------------------------------------------

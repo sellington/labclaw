@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import logging
 import random
-import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
 from labclaw.core.events import event_registry
+from labclaw.core.schemas import _now, _uuid
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +24,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -89,15 +81,16 @@ for _evt in _OPTIMIZATION_EVENTS:
 
 
 # ---------------------------------------------------------------------------
-# BayesianOptimizer
+# RandomSamplingOptimizer (MVP — will be replaced with GP-based Bayesian opt)
 # ---------------------------------------------------------------------------
 
 
-class BayesianOptimizer:
-    """Bayesian optimization engine for experimental parameters.
+class RandomSamplingOptimizer:
+    """MVP optimizer using uniform random sampling within parameter bounds.
 
-    MVP implementation uses random sampling within parameter bounds.
-    Tracks results and returns the best observed outcome.
+    This is a placeholder for a real Bayesian optimization engine (e.g.
+    scikit-optimize).  It samples randomly, tracks results, and returns
+    the best observed outcome.  Named honestly to reflect the algorithm.
     """
 
     def __init__(self, space: ParameterSpace) -> None:
@@ -158,3 +151,7 @@ class BayesianOptimizer:
     def get_history(self) -> list[OptimizationResult]:
         """Return all recorded results in order."""
         return list(self._history)
+
+
+# Backward-compatible alias — existing code references BayesianOptimizer
+BayesianOptimizer = RandomSamplingOptimizer
