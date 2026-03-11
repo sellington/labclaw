@@ -114,6 +114,34 @@ def test_translate_string_above_passthrough() -> None:
     assert result.comparison == "above"
 
 
+def test_translate_eq_operator() -> None:
+    rule = {"metric": "x", "operator": "==", "threshold": 0.0}
+    result = translate_sentinel_rule(rule, plugin_name="test")
+    assert result is not None
+    assert result.comparison == "equal"
+
+
+def test_translate_neq_operator() -> None:
+    rule = {"metric": "x", "operator": "!=", "threshold": 0.0}
+    result = translate_sentinel_rule(rule, plugin_name="test")
+    assert result is not None
+    assert result.comparison == "not_equal"
+
+
+def test_translate_string_equal_passthrough() -> None:
+    rule = {"metric": "x", "operator": "equal", "threshold": 1.0}
+    result = translate_sentinel_rule(rule, plugin_name="test")
+    assert result is not None
+    assert result.comparison == "equal"
+
+
+def test_translate_string_not_equal_passthrough() -> None:
+    rule = {"metric": "x", "operator": "not_equal", "threshold": 1.0}
+    result = translate_sentinel_rule(rule, plugin_name="test")
+    assert result is not None
+    assert result.comparison == "not_equal"
+
+
 # ---------------------------------------------------------------------------
 # translate_sentinel_rules (batch)
 # ---------------------------------------------------------------------------

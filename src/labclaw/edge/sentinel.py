@@ -45,7 +45,7 @@ class AlertRule(BaseModel):
     name: str
     metric_name: str
     threshold: float
-    comparison: str = "below"  # "below" or "above"
+    comparison: str = "below"  # "below", "above", "equal", or "not_equal"
     level: QualityLevel = QualityLevel.WARNING
 
 
