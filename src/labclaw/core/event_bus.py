@@ -42,9 +42,8 @@ class EventBus:
 
         # Dispatch to EventRegistry handlers first (if event is registered)
         if self._registry.is_registered(event_name):
-            with self._registry._lock:
-                registry_handlers = list(self._registry._handlers.get(event_name, []))
-                registry_wildcards = list(self._registry._handlers.get("*", []))
+            registry_handlers = self._registry.get_handlers(event_name)
+            registry_wildcards = self._registry.get_handlers("*")
             for handler in registry_handlers:
                 dispatched.add(id(handler))
                 try:
