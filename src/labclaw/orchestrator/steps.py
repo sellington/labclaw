@@ -922,13 +922,24 @@ class ConcludeStep:
             if self._session_memory is not None:
                 for i, finding_text in enumerate(findings):
                     try:
-                        finding_dict = {
+                        finding_dict: dict[str, Any] = {
                             "description": finding_text,
                             "cycle_id": context.cycle_id,
                             "pattern_count": len(context.patterns),
                         }
                         if i < len(finding_chains):
                             finding_dict["provenance"] = finding_chains[i]
+                        # Include pattern dedup keys so PatternDeduplicator
+                        # can match on column_a, column_b, pattern_type
+                        if i < len(context.patterns):
+                            pattern = context.patterns[i]
+                            evidence = getattr(pattern, "evidence", {})
+                            if isinstance(evidence, dict):
+                                finding_dict["column_a"] = evidence.get("col_a")
+                                finding_dict["column_b"] = evidence.get("col_b")
+                            finding_dict["pattern_type"] = getattr(
+                                pattern, "pattern_type", None
+                            )
                         await self._session_memory.store_finding(finding_dict)
                     except Exception:
                         logger.warning("Failed to persist finding to session memory")

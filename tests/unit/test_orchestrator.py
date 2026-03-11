@@ -809,13 +809,26 @@ class TestConcludeStep:
         """When session_memory is provided, findings are persisted via store_finding."""
         from unittest.mock import AsyncMock
 
+        from labclaw.discovery.mining import PatternRecord
+
         mock_memory = AsyncMock()
         mock_memory.store_finding.return_value = "finding-1"
-        ctx = StepContext(patterns=[{"pattern_type": "test"}])
+        pattern = PatternRecord(
+            pattern_type="correlation",
+            description="test pattern",
+            evidence={"col_a": "x", "col_b": "y", "r": 0.9},
+        )
+        ctx = StepContext(patterns=[pattern])
         step = ConcludeStep(session_memory=mock_memory)
         result = await step.run(ctx)
         assert result.success is True
         assert mock_memory.store_finding.call_count >= 1
+        # Verify first stored finding includes pattern dedup keys
+        first_call = mock_memory.store_finding.call_args_list[0]
+        finding_dict = first_call[0][0]
+        assert finding_dict["column_a"] == "x"
+        assert finding_dict["column_b"] == "y"
+        assert finding_dict["pattern_type"] == "correlation"
 
     @pytest.mark.asyncio
     async def test_session_memory_failure_does_not_crash(self):
