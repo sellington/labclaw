@@ -787,12 +787,14 @@ class ConcludeStep:
         entity_id: str = "lab",
         llm_provider: Any | None = None,
         max_llm_calls: int = 50,
+        session_memory: Any | None = None,
     ) -> None:
         self._memory_root = memory_root
         self._entity_id = entity_id
         self._llm_provider = llm_provider
         self._max_llm_calls = max_llm_calls
         self._llm_call_count = 0
+        self._session_memory = session_memory
 
     async def run(self, context: StepContext) -> StepResult:
         t0 = time.monotonic()
@@ -899,6 +901,21 @@ class ConcludeStep:
                     backend.append_memory(self._entity_id, entry)
                 except Exception:
                     logger.exception("Failed to log findings to Tier A memory")
+
+            # Persist findings to SessionMemoryManager for cross-session retrieval
+            if self._session_memory is not None:
+                for i, finding_text in enumerate(findings):
+                    try:
+                        finding_dict = {
+                            "description": finding_text,
+                            "cycle_id": context.cycle_id,
+                            "pattern_count": len(context.patterns),
+                        }
+                        if i < len(finding_chains):
+                            finding_dict["provenance"] = finding_chains[i]
+                        await self._session_memory.store_finding(finding_dict)
+                    except Exception:
+                        logger.warning("Failed to persist finding to session memory")
 
             ctx = context.model_copy(
                 update={
