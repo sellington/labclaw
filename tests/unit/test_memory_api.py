@@ -226,7 +226,8 @@ class TestKGNodesEndpoint:
             from labclaw.core.graph import GraphNode
 
             node = GraphNode(node_id="n1", node_type="experiment")
-            mock_kg = MagicMock()
+            mock_kg = AsyncMock()
+            mock_kg._initialized = True
             mock_kg.query_nodes.return_value = [node]
 
             with patch(
@@ -252,7 +253,8 @@ class TestKGNodesEndpoint:
         try:
             from labclaw.core.graph import GraphNode
 
-            mock_kg = MagicMock()
+            mock_kg = AsyncMock()
+            mock_kg._initialized = True
             mock_kg.query_nodes.return_value = [GraphNode(node_id="n2", node_type="finding")]
 
             with patch(
@@ -279,7 +281,8 @@ class TestKGNodesEndpoint:
         try:
             from labclaw.core.graph import GraphNode
 
-            mock_kg = MagicMock()
+            mock_kg = AsyncMock()
+            mock_kg._initialized = True
             mock_kg.query_nodes.return_value = [GraphNode(node_id="n3", node_type="hypothesis")]
 
             with patch(
@@ -306,7 +309,8 @@ class TestKGNodesEndpoint:
             from labclaw.core.graph import GraphNode
 
             nodes = [GraphNode(node_id=f"n{i}", node_type="x") for i in range(5)]
-            mock_kg = MagicMock()
+            mock_kg = AsyncMock()
+            mock_kg._initialized = True
             mock_kg.query_nodes.return_value = nodes
 
             with patch(
@@ -340,7 +344,8 @@ class TestKGNeighborsEndpoint:
             node = GraphNode(node_id="center", node_type="experiment")
             neighbor = GraphNode(node_id="nb1", node_type="finding")
             mock_edge = MagicMock()
-            mock_kg = MagicMock()
+            mock_kg = AsyncMock()
+            mock_kg._initialized = True
             mock_kg.get_node.return_value = node
             mock_kg.get_neighbors.return_value = [(neighbor, mock_edge)]
 
@@ -357,7 +362,7 @@ class TestKGNeighborsEndpoint:
             body = resp.json()
             assert len(body) == 1
             assert body[0]["node_id"] == "nb1"
-            mock_kg.get_neighbors.assert_called_once_with(
+            mock_kg.get_neighbors.assert_awaited_once_with(
                 "center", relation=None, direction="outgoing"
             )
         finally:
@@ -370,7 +375,8 @@ class TestKGNeighborsEndpoint:
         try:
             from labclaw.core.graph import GraphNode
 
-            mock_kg = MagicMock()
+            mock_kg = AsyncMock()
+            mock_kg._initialized = True
             mock_kg.get_node.return_value = GraphNode(node_id="c1", node_type="exp")
             mock_kg.get_neighbors.return_value = []
 
@@ -386,7 +392,7 @@ class TestKGNeighborsEndpoint:
                     )
 
             assert resp.status_code == 200
-            mock_kg.get_neighbors.assert_called_once_with(
+            mock_kg.get_neighbors.assert_awaited_once_with(
                 "c1", relation="caused_by", direction="incoming"
             )
         finally:
@@ -397,7 +403,8 @@ class TestKGNeighborsEndpoint:
         """GET /api/memory/kg/neighbors/{id} with unknown node returns 404."""
         reset_all()
         try:
-            mock_kg = MagicMock()
+            mock_kg = AsyncMock()
+            mock_kg._initialized = True
             mock_kg.get_node.return_value = None
 
             with patch(
@@ -424,7 +431,8 @@ class TestKGNeighborsEndpoint:
             node = GraphNode(node_id="c2", node_type="exp")
             mock_edge = MagicMock()
             neighbors = [(GraphNode(node_id=f"nb{i}", node_type="x"), mock_edge) for i in range(5)]
-            mock_kg = MagicMock()
+            mock_kg = AsyncMock()
+            mock_kg._initialized = True
             mock_kg.get_node.return_value = node
             mock_kg.get_neighbors.return_value = neighbors
 

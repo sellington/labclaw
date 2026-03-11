@@ -146,11 +146,14 @@ async def list_kg_nodes(
     from labclaw.memory.knowledge_graph import KGQueryFilter
 
     kg = get_tier_b_backend()
+    if not hasattr(kg, "_initialized"):
+        await kg.init_db()
+        kg._initialized = True
     filt = KGQueryFilter(
         node_type=node_type or None,
         tags=[label] if label else [],
     )
-    nodes = kg.query_nodes(filt)
+    nodes = await kg.query_nodes(filt)
     return [n.model_dump(mode="json") for n in nodes[:limit]]
 
 
@@ -163,10 +166,16 @@ async def get_kg_neighbors(
 ) -> list[dict[str, Any]]:
     """Get neighbor nodes for a given node in the knowledge graph."""
     kg = get_tier_b_backend()
-    node = kg.get_node(node_id)
+    if not hasattr(kg, "_initialized"):
+        await kg.init_db()
+        kg._initialized = True
+    try:
+        node = await kg.get_node(node_id)
+    except KeyError:
+        node = None
     if node is None:
         raise HTTPException(status_code=404, detail=f"Node {node_id!r} not found")
-    neighbors = kg.get_neighbors(
+    neighbors = await kg.get_neighbors(
         node_id,
         relation=relation or None,
         direction=direction,
