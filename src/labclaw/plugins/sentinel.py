@@ -21,8 +21,12 @@ _OPERATOR_MAP: dict[str, str] = {
     "<=": "below",
     ">": "above",
     ">=": "above",
+    "==": "equal",
+    "!=": "not_equal",
     "below": "below",
     "above": "above",
+    "equal": "equal",
+    "not_equal": "not_equal",
 }
 
 
@@ -56,7 +60,7 @@ def translate_sentinel_rule(
         )
         return None
 
-    level_raw = rule.get("level", "warning")
+    level_raw = rule.get("severity", rule.get("level", "warning"))
     try:
         level = QualityLevel(level_raw)
     except ValueError:

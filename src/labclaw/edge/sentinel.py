@@ -112,6 +112,10 @@ class Sentinel:
                 fired = True
             elif rule.comparison == "above" and metric.value > rule.threshold:
                 fired = True
+            elif rule.comparison == "equal" and metric.value == rule.threshold:
+                fired = True
+            elif rule.comparison == "not_equal" and metric.value != rule.threshold:
+                fired = True
 
             if fired:
                 alert = QualityAlert(
