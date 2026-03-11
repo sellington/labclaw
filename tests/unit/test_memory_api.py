@@ -227,13 +227,12 @@ class TestKGNodesEndpoint:
 
             node = GraphNode(node_id="n1", node_type="experiment")
             mock_kg = AsyncMock()
-            mock_kg._initialized = True
             mock_kg.query_nodes.return_value = [node]
 
             with patch(
                 "labclaw.api.routers.memory.get_tier_b_backend",
                 return_value=mock_kg,
-            ):
+            ), patch("labclaw.api.routers.memory._kg_initialized", True):
                 async with AsyncClient(
                     transport=ASGITransport(app=app), base_url="http://test"
                 ) as c:
@@ -254,13 +253,12 @@ class TestKGNodesEndpoint:
             from labclaw.core.graph import GraphNode
 
             mock_kg = AsyncMock()
-            mock_kg._initialized = True
             mock_kg.query_nodes.return_value = [GraphNode(node_id="n2", node_type="finding")]
 
             with patch(
                 "labclaw.api.routers.memory.get_tier_b_backend",
                 return_value=mock_kg,
-            ):
+            ), patch("labclaw.api.routers.memory._kg_initialized", True):
                 async with AsyncClient(
                     transport=ASGITransport(app=app), base_url="http://test"
                 ) as c:
@@ -282,13 +280,12 @@ class TestKGNodesEndpoint:
             from labclaw.core.graph import GraphNode
 
             mock_kg = AsyncMock()
-            mock_kg._initialized = True
             mock_kg.query_nodes.return_value = [GraphNode(node_id="n3", node_type="hypothesis")]
 
             with patch(
                 "labclaw.api.routers.memory.get_tier_b_backend",
                 return_value=mock_kg,
-            ):
+            ), patch("labclaw.api.routers.memory._kg_initialized", True):
                 async with AsyncClient(
                     transport=ASGITransport(app=app), base_url="http://test"
                 ) as c:
@@ -310,13 +307,12 @@ class TestKGNodesEndpoint:
 
             nodes = [GraphNode(node_id=f"n{i}", node_type="x") for i in range(5)]
             mock_kg = AsyncMock()
-            mock_kg._initialized = True
             mock_kg.query_nodes.return_value = nodes
 
             with patch(
                 "labclaw.api.routers.memory.get_tier_b_backend",
                 return_value=mock_kg,
-            ):
+            ), patch("labclaw.api.routers.memory._kg_initialized", True):
                 async with AsyncClient(
                     transport=ASGITransport(app=app), base_url="http://test"
                 ) as c:
@@ -345,14 +341,13 @@ class TestKGNeighborsEndpoint:
             neighbor = GraphNode(node_id="nb1", node_type="finding")
             mock_edge = MagicMock()
             mock_kg = AsyncMock()
-            mock_kg._initialized = True
             mock_kg.get_node.return_value = node
             mock_kg.get_neighbors.return_value = [(neighbor, mock_edge)]
 
             with patch(
                 "labclaw.api.routers.memory.get_tier_b_backend",
                 return_value=mock_kg,
-            ):
+            ), patch("labclaw.api.routers.memory._kg_initialized", True):
                 async with AsyncClient(
                     transport=ASGITransport(app=app), base_url="http://test"
                 ) as c:
@@ -376,14 +371,13 @@ class TestKGNeighborsEndpoint:
             from labclaw.core.graph import GraphNode
 
             mock_kg = AsyncMock()
-            mock_kg._initialized = True
             mock_kg.get_node.return_value = GraphNode(node_id="c1", node_type="exp")
             mock_kg.get_neighbors.return_value = []
 
             with patch(
                 "labclaw.api.routers.memory.get_tier_b_backend",
                 return_value=mock_kg,
-            ):
+            ), patch("labclaw.api.routers.memory._kg_initialized", True):
                 async with AsyncClient(
                     transport=ASGITransport(app=app), base_url="http://test"
                 ) as c:
@@ -404,13 +398,12 @@ class TestKGNeighborsEndpoint:
         reset_all()
         try:
             mock_kg = AsyncMock()
-            mock_kg._initialized = True
             mock_kg.get_node.return_value = None
 
             with patch(
                 "labclaw.api.routers.memory.get_tier_b_backend",
                 return_value=mock_kg,
-            ):
+            ), patch("labclaw.api.routers.memory._kg_initialized", True):
                 async with AsyncClient(
                     transport=ASGITransport(app=app), base_url="http://test"
                 ) as c:
@@ -432,14 +425,13 @@ class TestKGNeighborsEndpoint:
             mock_edge = MagicMock()
             neighbors = [(GraphNode(node_id=f"nb{i}", node_type="x"), mock_edge) for i in range(5)]
             mock_kg = AsyncMock()
-            mock_kg._initialized = True
             mock_kg.get_node.return_value = node
             mock_kg.get_neighbors.return_value = neighbors
 
             with patch(
                 "labclaw.api.routers.memory.get_tier_b_backend",
                 return_value=mock_kg,
-            ):
+            ), patch("labclaw.api.routers.memory._kg_initialized", True):
                 async with AsyncClient(
                     transport=ASGITransport(app=app), base_url="http://test"
                 ) as c:
@@ -449,3 +441,44 @@ class TestKGNeighborsEndpoint:
             assert len(resp.json()) == 1
         finally:
             reset_all()
+
+
+# ---------------------------------------------------------------------------
+# KG initialization lock (cold-start serialization)
+# ---------------------------------------------------------------------------
+
+
+class TestKGInitLock:
+    @pytest.mark.asyncio
+    async def test_ensure_kg_initialized_calls_init_db_once(self) -> None:
+        """_ensure_kg_initialized calls init_db exactly once on cold start."""
+        import labclaw.api.routers.memory as mem_mod
+
+        original = mem_mod._kg_initialized
+        mem_mod._kg_initialized = False
+        try:
+            mock_backend = AsyncMock()
+            await mem_mod._ensure_kg_initialized(mock_backend)
+            mock_backend.init_db.assert_awaited_once()
+            assert mem_mod._kg_initialized is True
+
+            # Second call should be a no-op
+            mock_backend.reset_mock()
+            await mem_mod._ensure_kg_initialized(mock_backend)
+            mock_backend.init_db.assert_not_awaited()
+        finally:
+            mem_mod._kg_initialized = original
+
+    @pytest.mark.asyncio
+    async def test_ensure_kg_initialized_skips_when_already_init(self) -> None:
+        """_ensure_kg_initialized is a no-op when already initialized."""
+        import labclaw.api.routers.memory as mem_mod
+
+        original = mem_mod._kg_initialized
+        mem_mod._kg_initialized = True
+        try:
+            mock_backend = AsyncMock()
+            await mem_mod._ensure_kg_initialized(mock_backend)
+            mock_backend.init_db.assert_not_awaited()
+        finally:
+            mem_mod._kg_initialized = original

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -135,6 +136,21 @@ async def list_findings(
 # Knowledge Graph (Tier B) endpoints
 # ---------------------------------------------------------------------------
 
+_kg_init_lock = asyncio.Lock()
+_kg_initialized = False
+
+
+async def _ensure_kg_initialized(backend: object) -> None:
+    """Serialize KG backend initialization so concurrent cold-start requests
+    do not call ``init_db()`` twice and leak connections."""
+    global _kg_initialized
+    if _kg_initialized:
+        return
+    async with _kg_init_lock:
+        if not _kg_initialized:  # double-check after acquiring lock
+            await backend.init_db()  # type: ignore[attr-defined]
+            _kg_initialized = True
+
 
 @router.get("/kg/nodes")
 async def list_kg_nodes(
@@ -146,9 +162,7 @@ async def list_kg_nodes(
     from labclaw.memory.knowledge_graph import KGQueryFilter
 
     kg = get_tier_b_backend()
-    if not hasattr(kg, "_initialized"):
-        await kg.init_db()
-        kg._initialized = True
+    await _ensure_kg_initialized(kg)
     filt = KGQueryFilter(
         node_type=node_type or None,
         tags=[label] if label else [],
@@ -166,9 +180,7 @@ async def get_kg_neighbors(
 ) -> list[dict[str, Any]]:
     """Get neighbor nodes for a given node in the knowledge graph."""
     kg = get_tier_b_backend()
-    if not hasattr(kg, "_initialized"):
-        await kg.init_db()
-        kg._initialized = True
+    await _ensure_kg_initialized(kg)
     try:
         node = await kg.get_node(node_id)
     except KeyError:
