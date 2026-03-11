@@ -12,7 +12,7 @@ Feature: Configuration
 
   Scenario: Default config has expected API port
     When I load the default configuration
-    Then the api port is 8000
+    Then the api port is 18800
 
   Scenario: Default config has expected database backend
     When I load the default configuration
@@ -43,4 +43,4 @@ Feature: Configuration
   Scenario: Missing config file falls back to defaults
     When I load config from a nonexistent path
     Then the config has a system section
-    And the api port is 8000
+    And the api port is 18800

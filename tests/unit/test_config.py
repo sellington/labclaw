@@ -97,7 +97,7 @@ class TestLabClawConfigDefaults:
         assert config.system.log_level == "INFO"
         assert config.graph.backend == "sqlite"
         assert config.events.backend == "memory"
-        assert config.api.port == 8000
+        assert config.api.port == 18800
         assert config.edge.watch_paths == []
         assert config.agents.default_model == "claude-sonnet-4-6"
         assert config.orchestrator.max_llm_calls == 50

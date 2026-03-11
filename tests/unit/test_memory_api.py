@@ -230,7 +230,7 @@ class TestKGNodesEndpoint:
             mock_kg.query_nodes.return_value = [node]
 
             with patch(
-                "labclaw.api.deps.get_tier_b_backend",
+                "labclaw.api.routers.memory.get_tier_b_backend",
                 return_value=mock_kg,
             ):
                 async with AsyncClient(
@@ -256,7 +256,7 @@ class TestKGNodesEndpoint:
             mock_kg.query_nodes.return_value = [GraphNode(node_id="n2", node_type="finding")]
 
             with patch(
-                "labclaw.api.deps.get_tier_b_backend",
+                "labclaw.api.routers.memory.get_tier_b_backend",
                 return_value=mock_kg,
             ):
                 async with AsyncClient(
@@ -283,7 +283,7 @@ class TestKGNodesEndpoint:
             mock_kg.query_nodes.return_value = [GraphNode(node_id="n3", node_type="hypothesis")]
 
             with patch(
-                "labclaw.api.deps.get_tier_b_backend",
+                "labclaw.api.routers.memory.get_tier_b_backend",
                 return_value=mock_kg,
             ):
                 async with AsyncClient(
@@ -310,7 +310,7 @@ class TestKGNodesEndpoint:
             mock_kg.query_nodes.return_value = nodes
 
             with patch(
-                "labclaw.api.deps.get_tier_b_backend",
+                "labclaw.api.routers.memory.get_tier_b_backend",
                 return_value=mock_kg,
             ):
                 async with AsyncClient(
@@ -345,7 +345,7 @@ class TestKGNeighborsEndpoint:
             mock_kg.get_neighbors.return_value = [(neighbor, mock_edge)]
 
             with patch(
-                "labclaw.api.deps.get_tier_b_backend",
+                "labclaw.api.routers.memory.get_tier_b_backend",
                 return_value=mock_kg,
             ):
                 async with AsyncClient(
@@ -375,7 +375,7 @@ class TestKGNeighborsEndpoint:
             mock_kg.get_neighbors.return_value = []
 
             with patch(
-                "labclaw.api.deps.get_tier_b_backend",
+                "labclaw.api.routers.memory.get_tier_b_backend",
                 return_value=mock_kg,
             ):
                 async with AsyncClient(
@@ -401,7 +401,7 @@ class TestKGNeighborsEndpoint:
             mock_kg.get_node.return_value = None
 
             with patch(
-                "labclaw.api.deps.get_tier_b_backend",
+                "labclaw.api.routers.memory.get_tier_b_backend",
                 return_value=mock_kg,
             ):
                 async with AsyncClient(
@@ -429,7 +429,7 @@ class TestKGNeighborsEndpoint:
             mock_kg.get_neighbors.return_value = neighbors
 
             with patch(
-                "labclaw.api.deps.get_tier_b_backend",
+                "labclaw.api.routers.memory.get_tier_b_backend",
                 return_value=mock_kg,
             ):
                 async with AsyncClient(

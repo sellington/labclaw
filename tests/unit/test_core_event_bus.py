@@ -149,3 +149,83 @@ def test_create_event_non_standard_layer() -> None:
     event = bus.create_event("custom.module.action")
 
     assert event.source_layer == Layer.INFRA
+
+
+# ---------------------------------------------------------------------------
+# Registry delegation
+# ---------------------------------------------------------------------------
+
+
+def test_publish_dispatches_to_registry_handlers() -> None:
+    """Handlers registered on the registry receive events published via the bus."""
+    bus, reg = _make_bus(["infra.bus.reg"])
+    received: list[LabEvent] = []
+    reg.subscribe("infra.bus.reg", received.append)
+
+    event = _lab_event("infra.bus.reg")
+    bus.publish(event)
+
+    assert len(received) == 1
+    assert received[0].event_id == event.event_id
+
+
+def test_publish_deduplicates_shared_handlers() -> None:
+    """A handler registered on BOTH registry and bus is only called once."""
+    bus, reg = _make_bus(["infra.bus.dedup"])
+    call_count = {"n": 0}
+
+    def handler(_: LabEvent) -> None:
+        call_count["n"] += 1
+
+    reg.subscribe("infra.bus.dedup", handler)
+    bus.subscribe("infra.bus.dedup", handler)
+
+    bus.publish(_lab_event("infra.bus.dedup"))
+    assert call_count["n"] == 1
+
+
+def test_publish_registry_wildcard_handler() -> None:
+    """Registry wildcard handlers receive events published via the bus."""
+    bus, reg = _make_bus(["infra.bus.wild"])
+    received: list[LabEvent] = []
+    reg.subscribe("*", received.append)
+
+    bus.publish(_lab_event("infra.bus.wild"))
+    assert len(received) == 1
+
+
+def test_publish_registry_handler_exception_no_crash() -> None:
+    """A registry handler that raises must not propagate the exception."""
+    bus, reg = _make_bus(["infra.bus.err"])
+
+    def bad_handler(_: LabEvent) -> None:
+        raise RuntimeError("registry handler error")
+
+    reg.subscribe("infra.bus.err", bad_handler)
+    bus.publish(_lab_event("infra.bus.err"))  # Must not raise
+
+
+def test_publish_registry_wildcard_exception_no_crash() -> None:
+    """A registry wildcard handler that raises must not crash the bus."""
+    bus, reg = _make_bus(["infra.bus.werr"])
+
+    def bad_handler(_: LabEvent) -> None:
+        raise RuntimeError("registry wildcard error")
+
+    reg.subscribe("*", bad_handler)
+    bus.publish(_lab_event("infra.bus.werr"))  # Must not raise
+
+
+def test_publish_dedup_bus_wildcard_with_registry() -> None:
+    """A wildcard handler registered on both registry and bus is called only once."""
+    bus, reg = _make_bus(["infra.bus.bw"])
+    call_count = {"n": 0}
+
+    def handler(_: LabEvent) -> None:
+        call_count["n"] += 1
+
+    reg.subscribe("*", handler)
+    bus.subscribe("*", handler)
+
+    bus.publish(_lab_event("infra.bus.bw"))
+    assert call_count["n"] == 1

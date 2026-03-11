@@ -53,7 +53,7 @@ def test_translate_missing_threshold_returns_none() -> None:
 
 
 def test_translate_unknown_operator_returns_none() -> None:
-    rule = {"metric": "x", "operator": "!=", "threshold": 1.0}
+    rule = {"metric": "x", "operator": "~=", "threshold": 1.0}
     result = translate_sentinel_rule(rule, plugin_name="test")
     assert result is None
 

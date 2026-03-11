@@ -118,6 +118,29 @@ class TestObserveStep:
         result = await ObserveStep(sentinel=mock_sentinel).run(ctx)
         assert result.success is True
 
+    @pytest.mark.asyncio
+    async def test_sentinel_checks_data_column_metrics(self):
+        """Plugin sentinel rules targeting data columns are evaluated."""
+        from labclaw.core.schemas import QualityLevel
+        from labclaw.edge.sentinel import AlertRule, Sentinel
+
+        # Rule that checks a data column named "baseline_fluorescence"
+        rule = AlertRule(
+            name="fluor_low",
+            metric_name="baseline_fluorescence",
+            threshold=100.0,
+            comparison="below",
+            level=QualityLevel.WARNING,
+        )
+        sentinel = Sentinel(rules=[rule])
+        # Create rows where baseline_fluorescence mean < 100
+        rows = [{"baseline_fluorescence": 50.0, "x": float(i)} for i in range(10)]
+        ctx = StepContext(data_rows=rows)
+        result = await ObserveStep(sentinel=sentinel).run(ctx)
+        assert result.success is True
+        alerts = result.context.metadata.get("sentinel_alerts", [])
+        assert any(a["metric"] == "baseline_fluorescence" for a in alerts)
+
 
 # ---------------------------------------------------------------------------
 # AskStep
@@ -241,7 +264,7 @@ class TestHypothesizeStep:
                 "labclaw.discovery.hypothesis.HypothesisInput",
             ),
         ):
-            ctx = StepContext(patterns=["p1"])
+            ctx = StepContext(patterns=[{"pattern_type": "test"}])
             result = await HypothesizeStep().run(ctx)
             assert result.success is True
             assert result.context.hypotheses == ["hyp1"]
@@ -264,7 +287,7 @@ class TestHypothesizeStep:
             ),
         ):
             step = HypothesizeStep(llm_provider=mock_llm)
-            ctx = StepContext(patterns=["p1"])
+            ctx = StepContext(patterns=[{"pattern_type": "test"}])
             result = await step.run(ctx)
             assert result.success is True
             assert result.context.hypotheses == ["llm_hyp"]
@@ -290,7 +313,7 @@ class TestHypothesizeStep:
             ),
         ):
             step = HypothesizeStep(llm_provider=mock_llm)
-            ctx = StepContext(patterns=["p1"])
+            ctx = StepContext(patterns=[{"pattern_type": "test"}])
             result = await step.run(ctx)
             assert result.success is True
             # Should have used the template generator as fallback
@@ -329,7 +352,7 @@ class TestHypothesizeStep:
                 },
             )()
             step = HypothesizeStep(session_memory=mock_memory)
-            ctx = StepContext(patterns=["p1"])
+            ctx = StepContext(patterns=[{"pattern_type": "test"}])
             result = await step.run(ctx)
             assert result.success is True
             assert captured_input["context_findings"] == [{"description": "past finding 1"}]
@@ -376,7 +399,7 @@ class TestHypothesizeStep:
             patch("labclaw.discovery.hypothesis.HypothesisInput"),
         ):
             step = HypothesizeStep(session_memory=mock_memory)
-            ctx = StepContext(patterns=["p1"])
+            ctx = StepContext(patterns=[{"pattern_type": "test"}])
             result = await step.run(ctx)
             assert result.success is True
 
@@ -614,10 +637,14 @@ class TestAnalyzeStep:
 
     @pytest.mark.asyncio
     async def test_correlation_pattern_validates(self):
-        pattern = MagicMock()
-        pattern.pattern_id = "pat1"
-        pattern.pattern_type = "correlation"
-        pattern.evidence = {"col_a": "x", "col_b": "y"}
+        from labclaw.discovery.mining import PatternRecord
+
+        pattern = PatternRecord(
+            pattern_id="pat1",
+            pattern_type="correlation",
+            description="test correlation",
+            evidence={"col_a": "x", "col_b": "y"},
+        )
 
         mock_test_result = MagicMock()
         mock_test_result.test_name = "permutation"
@@ -637,10 +664,14 @@ class TestAnalyzeStep:
     @pytest.mark.asyncio
     async def test_missing_evidence_fields(self):
         """Pattern with correlation type but missing col_a/col_b evidence."""
-        pattern = MagicMock()
-        pattern.pattern_id = "pat2"
-        pattern.pattern_type = "correlation"
-        pattern.evidence = {}  # Missing col_a, col_b
+        from labclaw.discovery.mining import PatternRecord
+
+        pattern = PatternRecord(
+            pattern_id="pat2",
+            pattern_type="correlation",
+            description="test missing evidence",
+            evidence={},  # Missing col_a, col_b
+        )
 
         ctx = StepContext(data_rows=_numeric_rows(10), patterns=[pattern])
         result = await AnalyzeStep().run(ctx)
@@ -666,8 +697,8 @@ class TestConcludeStep:
     @pytest.mark.asyncio
     async def test_full_context_summarizes_all(self):
         ctx = StepContext(
-            patterns=["p1", "p2"],
-            hypotheses=["h1"],
+            patterns=[{"pattern_type": "test"}, {"pattern_type": "test2"}],
+            hypotheses=[{"statement": "h1"}],
             predictions={"r_squared": 0.95, "target_column": "y"},
             proposals=[{"id": 1}],
             analysis_results={
@@ -692,7 +723,7 @@ class TestConcludeStep:
             patch("labclaw.memory.markdown.TierABackend") as mock_backend_cls,
             patch("labclaw.memory.markdown.MemoryEntry"),
         ):
-            ctx = StepContext(patterns=["p1"])
+            ctx = StepContext(patterns=[{"pattern_type": "test"}])
             step = ConcludeStep(memory_root=tmp_path, entity_id="lab")
             result = await step.run(ctx)
             assert result.success is True
@@ -705,7 +736,7 @@ class TestConcludeStep:
             patch("labclaw.memory.markdown.MemoryEntry"),
         ):
             mock_backend_cls.return_value.append_memory.side_effect = OSError("write fail")
-            ctx = StepContext(patterns=["p1"])
+            ctx = StepContext(patterns=[{"pattern_type": "test"}])
             step = ConcludeStep(memory_root=tmp_path)
             result = await step.run(ctx)
             assert result.success is True
@@ -719,7 +750,7 @@ class TestConcludeStep:
             return "The data reveals a strong pattern."
 
         mock_llm.complete = mock_complete
-        ctx = StepContext(patterns=["p1"])
+        ctx = StepContext(patterns=[{"pattern_type": "test"}])
         step = ConcludeStep(llm_provider=mock_llm)
         result = await step.run(ctx)
         assert result.success is True
@@ -731,7 +762,7 @@ class TestConcludeStep:
         """When cost guard fires, LLM synthesis is skipped."""
         mock_llm = MagicMock()
         step = ConcludeStep(llm_provider=mock_llm, max_llm_calls=0)
-        ctx = StepContext(patterns=["p1"])
+        ctx = StepContext(patterns=[{"pattern_type": "test"}])
         result = await step.run(ctx)
         assert result.success is True
         assert not any("LLM synthesis:" in f for f in result.context.findings)
@@ -745,7 +776,7 @@ class TestConcludeStep:
             raise RuntimeError("LLM unavailable")
 
         mock_llm.complete = mock_complete
-        ctx = StepContext(patterns=["p1"])
+        ctx = StepContext(patterns=[{"pattern_type": "test"}])
         step = ConcludeStep(llm_provider=mock_llm)
         result = await step.run(ctx)
         assert result.success is True
@@ -754,7 +785,7 @@ class TestConcludeStep:
     @pytest.mark.asyncio
     async def test_no_llm_provider_skips_synthesis(self):
         """Without llm_provider, no synthesis is attempted."""
-        ctx = StepContext(patterns=["p1"])
+        ctx = StepContext(patterns=[{"pattern_type": "test"}])
         step = ConcludeStep(llm_provider=None)
         result = await step.run(ctx)
         assert result.success is True
@@ -770,8 +801,33 @@ class TestConcludeStep:
         mock_llm.complete = mock_complete
         step = ConcludeStep(llm_provider=mock_llm)
         # Call the private method directly from sync context (no event loop)
-        synthesis = step._synthesize_with_llm(["Found 2 patterns"], StepContext(patterns=["p1"]))
+        synthesis = step._synthesize_with_llm(["Found 2 patterns"], StepContext(patterns=[{"pattern_type": "test"}]))
         assert "Direct sync synthesis" in synthesis
+
+    @pytest.mark.asyncio
+    async def test_session_memory_stores_findings(self):
+        """When session_memory is provided, findings are persisted via store_finding."""
+        from unittest.mock import AsyncMock
+
+        mock_memory = AsyncMock()
+        mock_memory.store_finding.return_value = "finding-1"
+        ctx = StepContext(patterns=[{"pattern_type": "test"}])
+        step = ConcludeStep(session_memory=mock_memory)
+        result = await step.run(ctx)
+        assert result.success is True
+        assert mock_memory.store_finding.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_session_memory_failure_does_not_crash(self):
+        """When store_finding raises, ConcludeStep still succeeds."""
+        from unittest.mock import AsyncMock
+
+        mock_memory = AsyncMock()
+        mock_memory.store_finding.side_effect = RuntimeError("memory error")
+        ctx = StepContext(patterns=[{"pattern_type": "test"}])
+        step = ConcludeStep(session_memory=mock_memory)
+        result = await step.run(ctx)
+        assert result.success is True
 
 
 # ---------------------------------------------------------------------------
