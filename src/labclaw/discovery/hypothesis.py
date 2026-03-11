@@ -141,7 +141,7 @@ class HypothesisGenerator:
         template: dict, patterns: list[PatternRecord]
     ) -> HypothesisOutput | None:
         """Generate a hypothesis from a plugin-provided template."""
-        statement = template.get("statement", "")
+        statement = template.get("statement") or template.get("description", "")
         if not statement:
             return None
         # Substitute {pattern_count} placeholder if present
