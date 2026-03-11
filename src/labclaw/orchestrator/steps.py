@@ -180,6 +180,23 @@ class ObserveStep:
                         ),
                         QualityMetric(name="numeric_column_count", value=float(len(numeric_cols))),
                     ]
+                    # Also evaluate plugin sentinel rules against actual data columns.
+                    # Compute column-level mean values for numeric columns so rules
+                    # like "baseline_fluorescence < 100" can fire.
+                    sentinel_metric_names = {r.metric_name for r in self._sentinel._rules}
+                    for col in numeric_cols:
+                        if col not in sentinel_metric_names:
+                            continue
+                        col_vals = [
+                            float(row[col])
+                            for row in rows
+                            if col in row
+                            and isinstance(row[col], (int, float))
+                            and not isinstance(row[col], bool)
+                        ]
+                        if col_vals:
+                            mean_val = sum(col_vals) / len(col_vals)
+                            metrics.append(QualityMetric(name=col, value=mean_val))
                     for metric in metrics:
                         alerts = self._sentinel.check_metric(metric)
                         for alert in alerts:
