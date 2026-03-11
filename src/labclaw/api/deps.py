@@ -14,8 +14,13 @@ import threading
 import time
 from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, Request, status
+
+if TYPE_CHECKING:
+    from labclaw.memory.knowledge_graph import TierBBackend
+    from labclaw.memory.sqlite_backend import SQLiteTierBBackend
 
 from labclaw.core.events import event_registry
 from labclaw.core.governance import GovernanceEngine, SafetyLevel
@@ -83,7 +88,7 @@ def get_tier_a_backend() -> TierABackend:
 
 
 @lru_cache
-def get_tier_b_backend() -> object:
+def get_tier_b_backend() -> TierBBackend | SQLiteTierBBackend:
     """Return process-wide KG backend (SQLite-backed for persistence)."""
     from labclaw.memory.knowledge_graph import create_tier_b_backend
 
