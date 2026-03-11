@@ -29,9 +29,6 @@ from labclaw.memory.markdown import TierABackend
 
 logger = logging.getLogger(__name__)
 
-# Re-export for use in memory router
-_tier_b_backend_lock = threading.Lock()
-
 # ---------------------------------------------------------------------------
 # Configurable root for Tier A memory
 # ---------------------------------------------------------------------------
