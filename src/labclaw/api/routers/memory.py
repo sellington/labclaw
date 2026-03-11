@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from labclaw.api.deps import get_tier_a_backend
+from labclaw.api.deps import get_tier_a_backend, get_tier_b_backend
 from labclaw.memory.markdown import MemoryEntry, SearchResult, TierABackend
 
 router = APIRouter()
@@ -143,9 +143,9 @@ async def list_kg_nodes(
     limit: int = Query(default=50, ge=1, le=500),
 ) -> list[dict[str, Any]]:
     """List nodes in the knowledge graph with optional type/label filtering."""
-    from labclaw.memory.knowledge_graph import KGQueryFilter, TierBBackend
+    from labclaw.memory.knowledge_graph import KGQueryFilter
 
-    kg = TierBBackend()
+    kg = get_tier_b_backend()
     filt = KGQueryFilter(
         node_type=node_type or None,
         tags=[label] if label else [],
@@ -162,9 +162,7 @@ async def get_kg_neighbors(
     limit: int = Query(default=50, ge=1, le=500),
 ) -> list[dict[str, Any]]:
     """Get neighbor nodes for a given node in the knowledge graph."""
-    from labclaw.memory.knowledge_graph import TierBBackend
-
-    kg = TierBBackend()
+    kg = get_tier_b_backend()
     node = kg.get_node(node_id)
     if node is None:
         raise HTTPException(status_code=404, detail=f"Node {node_id!r} not found")

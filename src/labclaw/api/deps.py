@@ -29,6 +29,9 @@ from labclaw.memory.markdown import TierABackend
 
 logger = logging.getLogger(__name__)
 
+# Re-export for use in memory router
+_tier_b_backend_lock = threading.Lock()
+
 # ---------------------------------------------------------------------------
 # Configurable root for Tier A memory
 # ---------------------------------------------------------------------------
@@ -80,6 +83,14 @@ def get_device_registry() -> DeviceRegistry:
 @lru_cache
 def get_tier_a_backend() -> TierABackend:
     return TierABackend(root=_default_memory_root())
+
+
+@lru_cache
+def get_tier_b_backend() -> object:
+    """Return process-wide KG backend (SQLite-backed for persistence)."""
+    from labclaw.memory.knowledge_graph import create_tier_b_backend
+
+    return create_tier_b_backend()
 
 
 @lru_cache
@@ -349,6 +360,7 @@ def reset_all() -> None:
     for fn in (
         get_device_registry,
         get_tier_a_backend,
+        get_tier_b_backend,
         get_session_chronicle,
         get_pattern_miner,
         get_hypothesis_generator,
