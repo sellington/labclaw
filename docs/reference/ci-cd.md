@@ -20,9 +20,15 @@ automation, and deployment.
 - `release.yml`
   - Triggers: `v*` tags, manual dispatch with a tag
   - Jobs:
-    - Build artifacts
-    - Publish GitHub Release
-    - Optional PyPI publish when `PYPI_API_TOKEN` is configured
+    - `verify-release-gate`:
+      - Validates tag format (`vMAJOR.MINOR.PATCH`)
+      - Verifies tag version equals `project.version` in `pyproject.toml`
+      - Verifies matching version heading exists in `CHANGELOG.md`
+      - Verifies tagged commit is reachable from `origin/main`
+      - Runs lint/type/test gates (including `--cov-fail-under=100`)
+    - Build artifacts (+ wheel smoke-import)
+    - Publish GitHub Release (protected `release` environment)
+    - Publish PyPI (protected `pypi` environment)
 - `deploy.yml`
   - Trigger: manual dispatch
   - Syncs code, installs dependencies on remote host, restarts systemd service,
@@ -48,7 +54,9 @@ Also require:
 
 ### Release
 
-- `PYPI_API_TOKEN` (optional): enables PyPI publishing in `release.yml`
+- PyPI Trusted Publishing (OIDC): no `PYPI_API_TOKEN` required by default
+- `release` environment: recommended required reviewers before GitHub release
+- `pypi` environment: required for publish job (already configured in workflow)
 
 ### Deploy
 
@@ -73,3 +81,6 @@ Optional repository variables:
   provisions users and writes systemd units.
 - `pip-audit` may show local package names (`labclaw`) as non-PyPI packages;
   this is expected and non-blocking.
+- `security.yml` currently ignores `nltk` advisories `GHSA-rf74-v2fm-23pw`,
+  `CVE-2026-33230`, and `CVE-2026-33231` because no upstream fixed version is
+  published yet. Remove these ignore flags once a fixed `nltk` release exists.

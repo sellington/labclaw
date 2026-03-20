@@ -67,7 +67,7 @@ Feature: Promotion Gates
   Scenario: Promote analyst to specialist
     Given digital member "iota" with role "digital_analyst" exists
     And "iota" has 25 benchmarks with average score 0.90
-    When I promote "iota"
+    When I promote "iota" approved by "pi_zhang"
     Then "iota" has role "digital_specialist"
     And an event "persona.member.promoted" is emitted
 

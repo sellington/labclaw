@@ -454,6 +454,14 @@ def promote_member(persona_mgr: PersonaManager, member_map: dict[str, str], name
     persona_mgr.promote(mid)
 
 
+@when(parsers.parse('I promote "{name}" approved by "{approver}"'))
+def promote_member_with_approval(
+    persona_mgr: PersonaManager, member_map: dict[str, str], name: str, approver: str
+) -> None:
+    mid = member_map[name]
+    persona_mgr.promote(mid, approver=approver)
+
+
 @when(parsers.parse('I demote "{name}"'))
 def demote_member(persona_mgr: PersonaManager, member_map: dict[str, str], name: str) -> None:
     mid = member_map[name]

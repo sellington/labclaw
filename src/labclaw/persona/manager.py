@@ -189,10 +189,11 @@ class PersonaManager:
 
         return None
 
-    def promote(self, member_id: str) -> MemberProfile:
+    def promote(self, member_id: str, approver: str | None = None) -> MemberProfile:
         """Promote a digital member to the next role.
 
         Raises ValueError if the member cannot be promoted.
+        For promotion gates with ``requires_approval=True``, ``approver`` is required.
         """
         member = self.get_member(member_id)
 
@@ -202,6 +203,11 @@ class PersonaManager:
         gate = self.check_promotion(member_id)
         if gate is None:
             raise ValueError(f"Member {member_id!r} does not meet promotion requirements")
+        if gate.requires_approval and not approver:
+            raise ValueError(
+                f"Promotion from {gate.from_role.value!r} to {gate.to_role.value!r} "
+                "requires approval"
+            )
 
         from_role = member.role
         member.role = gate.to_role
@@ -213,6 +219,7 @@ class PersonaManager:
                 "member_id": member_id,
                 "from_role": from_role.value,
                 "to_role": gate.to_role.value,
+                "approved_by": approver,
             },
         )
         logger.info("Promoted %s: %s -> %s", member_id, from_role.value, gate.to_role.value)

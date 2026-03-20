@@ -93,13 +93,15 @@ class PersonaManager:
     def record_benchmark(member_id: str, task_type: str, score: float, details: dict | None) -> BenchmarkResult
     def record_correction(member_id: str, category: str, detail: str, corrected_by: str) -> CorrectionEntry
     def check_promotion(member_id: str) -> PromotionGate | None
-    def promote(member_id: str) -> MemberProfile
+    def promote(member_id: str, approver: str | None = None) -> MemberProfile
     def demote(member_id: str) -> MemberProfile
 ```
 
 ### Constraints
 
 - `promote()` / `demote()` only change digital member roles along the ladder.
+- If the matched `PromotionGate.requires_approval` is `True`, `promote()` requires
+  a non-empty `approver`.
 - Human members cannot be demoted below their actual role.
 - `check_promotion()` returns the matching `PromotionGate` if the member meets
   all criteria, or `None` if not eligible.

@@ -187,6 +187,27 @@ def test_promote_without_eligibility_raises() -> None:
         mgr.promote(profile.member_id)
 
 
+def test_promote_specialist_requires_approval() -> None:
+    mgr = _mgr()
+    profile = mgr.create_member("Bot-4", MemberRole.DIGITAL_ANALYST, is_digital=True)
+    for _ in range(25):
+        mgr.record_benchmark(profile.member_id, "analysis", 0.9)
+
+    with pytest.raises(ValueError, match="requires approval"):
+        mgr.promote(profile.member_id)
+
+
+def test_promote_specialist_with_approval_succeeds() -> None:
+    mgr = _mgr()
+    profile = mgr.create_member("Bot-5", MemberRole.DIGITAL_ANALYST, is_digital=True)
+    for _ in range(25):
+        mgr.record_benchmark(profile.member_id, "analysis", 0.9)
+
+    updated = mgr.promote(profile.member_id, approver="pi_zhang")
+    assert updated.role == MemberRole.DIGITAL_SPECIALIST
+    assert updated.promoted_at is not None
+
+
 # ---------------------------------------------------------------------------
 # demote
 # ---------------------------------------------------------------------------
