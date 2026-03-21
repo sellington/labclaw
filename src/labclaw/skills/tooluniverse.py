@@ -1,15 +1,15 @@
-"""ToolUniverse skill — scientific instrument knowledge and protocol search.
+"""ToolUniverse skill — real integration with mims-harvard/ToolUniverse SDK.
 
-Wraps the ToolUniverse API to provide instrument lookup, protocol retrieval,
-and equipment recommendation capabilities to the agent runtime.
+Uses the tooluniverse Python package (pip install tooluniverse) to provide
+2000+ scientific tools covering UniProt, ChEMBL, PubChem, OpenTargets,
+FAERS, ClinicalTrials, and more.
 
-Maps to: EXPERIMENT step (instrument selection and parameter guidance).
+Maps to: EXPERIMENT step (instrument/tool selection) and ANALYZE step.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
 from labclaw.agents.tools import AgentTool, ToolResult
@@ -17,180 +17,225 @@ from labclaw.skills.base import CloudSkill, SkillCapability, SkillMetadata
 
 logger = logging.getLogger(__name__)
 
+# Lazy-loaded singleton to avoid slow startup
+_tu_instance: Any = None
 
-async def _search_instruments(
-    query: str,
-    *,
-    category: str = "",
-    limit: int = 10,
-    api_key: str = "",
-    base_url: str = "",
-) -> ToolResult:
-    """Search ToolUniverse for instruments matching a query."""
-    try:
-        import httpx
 
-        url = f"{base_url}/api/v1/tools/search" if base_url else ""
-        if not url or not api_key:
-            return ToolResult(
-                success=True,
-                data={
-                    "results": [],
-                    "note": "ToolUniverse not configured (set TOOLUNIVERSE_API_KEY)",
-                },
-            )
+def _get_tu() -> Any:
+    """Get or create the ToolUniverse singleton."""
+    global _tu_instance  # noqa: PLW0603
+    if _tu_instance is None:
+        from tooluniverse import ToolUniverse
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(
-                url,
-                params={"q": query, "category": category, "limit": limit},
-                headers={"Authorization": f"Bearer {api_key}"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-        return ToolResult(
-            success=True,
-            data={
-                "results": data.get("tools", [])[:limit],
-                "total": data.get("total", 0),
-                "query": query,
-            },
+        _tu_instance = ToolUniverse()
+        _tu_instance.load_tools()
+        logger.info(
+            "ToolUniverse initialized with %d tools",
+            len(_tu_instance.return_all_loaded_tools()),
         )
+    return _tu_instance
+
+
+def _sync_run(tu: Any, payload: dict[str, Any]) -> Any:
+    """Run tu.run() in a thread to avoid event-loop conflicts."""
+    return tu.run(payload)
+
+
+async def _run_tool(
+    name: str,
+    *,
+    arguments: dict[str, Any] | None = None,
+) -> ToolResult:
+    """Execute a ToolUniverse tool by name with arguments."""
+    try:
+        import asyncio
+
+        tu = _get_tu()
+        payload = {"name": name, "arguments": arguments or {}}
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, _sync_run, tu, payload)
+
+        if isinstance(result, dict) and result.get("status") == "error":
+            return ToolResult(
+                success=False,
+                error=result.get("error", "Unknown error"),
+            )
+
+        return ToolResult(success=True, data=result)
     except Exception as exc:
-        logger.warning("ToolUniverse search failed: %s", exc)
+        logger.warning("ToolUniverse run(%s) failed: %s", name, exc)
         return ToolResult(success=False, error=str(exc))
 
 
-async def _get_protocol(
-    instrument_id: str,
+async def _find_tools(
+    description: str,
     *,
-    protocol_type: str = "standard",
-    api_key: str = "",
-    base_url: str = "",
+    limit: int = 5,
 ) -> ToolResult:
-    """Retrieve a protocol for a specific instrument from ToolUniverse."""
+    """Find relevant tools by natural language description."""
     try:
-        import httpx
+        tu = _get_tu()
 
-        url = f"{base_url}/api/v1/tools/{instrument_id}/protocols" if base_url else ""
-        if not url or not api_key:
+        # Use Tool_Finder (basic keyword search, no embedding needed)
+        result = tu.run(
+            {
+                "name": "Tool_Finder",
+                "arguments": {
+                    "description": description,
+                    "limit": limit,
+                },
+            }
+        )
+
+        if isinstance(result, dict) and result.get("status") == "error":
+            # Fallback: pattern-based search
+            matches = tu.find_tools_by_pattern(description)
             return ToolResult(
                 success=True,
                 data={
-                    "protocol": None,
-                    "note": "ToolUniverse not configured",
+                    "tools": [
+                        {
+                            "name": t.get("name", ""),
+                            "description": str(t.get("description", ""))[:200],
+                            "category": t.get("category", ""),
+                        }
+                        for t in (matches[:limit] if matches else [])
+                    ],
+                    "source": "pattern_search",
                 },
             )
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(
-                url,
-                params={"type": protocol_type},
-                headers={"Authorization": f"Bearer {api_key}"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        return ToolResult(success=True, data=result)
+    except Exception as exc:
+        logger.warning("ToolUniverse find_tools failed: %s", exc)
+        return ToolResult(success=False, error=str(exc))
 
+
+async def _get_tool_spec(
+    tool_name: str,
+) -> ToolResult:
+    """Get the OpenAI-format specification for a tool."""
+    try:
+        tu = _get_tu()
+        spec = tu.tool_specification(tool_name, format="openai")
+        return ToolResult(success=True, data=spec)
+    except Exception as exc:
+        logger.warning("ToolUniverse spec(%s) failed: %s", tool_name, exc)
+        return ToolResult(success=False, error=str(exc))
+
+
+async def _list_categories() -> ToolResult:
+    """List all available tool categories."""
+    try:
+        tu = _get_tu()
+        types = tu.get_tool_types()
         return ToolResult(
             success=True,
             data={
-                "instrument_id": instrument_id,
-                "protocol": data.get("protocol"),
-                "parameters": data.get("parameters", {}),
+                "categories": types,
+                "total": len(types),
             },
         )
     except Exception as exc:
-        logger.warning("ToolUniverse protocol retrieval failed: %s", exc)
+        logger.warning("ToolUniverse list_categories failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
 
 
 class ToolUniverseSkill:
-    """ToolUniverse integration — instrument knowledge for the cloud brain."""
+    """Real ToolUniverse integration — 2000+ scientific tools."""
 
     metadata: SkillMetadata = SkillMetadata(
         name="tooluniverse",
-        version="0.1.0",
-        description="Scientific instrument search, protocol retrieval, and equipment guidance.",
-        capabilities=[SkillCapability.INSTRUMENT_KNOWLEDGE],
+        version="0.2.0",
+        description=(
+            "2000+ scientific tools via ToolUniverse SDK: UniProt, "
+            "ChEMBL, PubChem, OpenTargets, ClinicalTrials, and more."
+        ),
+        capabilities=[
+            SkillCapability.INSTRUMENT_KNOWLEDGE,
+            SkillCapability.DATA_ANALYSIS,
+            SkillCapability.LITERATURE_SEARCH,
+        ],
         author="labclaw-core",
-        requires_api_key=True,
-        api_key_env="TOOLUNIVERSE_API_KEY",
+        requires_api_key=False,
     )
 
-    def __init__(self) -> None:
-        self._api_key = os.environ.get("TOOLUNIVERSE_API_KEY", "")
-        self._base_url = os.environ.get("TOOLUNIVERSE_BASE_URL", "")
-
     def get_tools(self) -> list[AgentTool]:
-        """Return agent tools for instrument search and protocol retrieval."""
-        from functools import partial
-
+        """Return agent tools for ToolUniverse access."""
         return [
             AgentTool(
-                name="search_instruments",
+                name="tu_run",
                 description=(
-                    "Search ToolUniverse for scientific instruments by name, "
-                    "category, or application. Returns matching instruments "
-                    "with specifications and availability."
+                    "Execute any ToolUniverse tool by name. "
+                    "2000+ tools: UniProt, ChEMBL, PubChem, "
+                    "OpenTargets, FAERS, ClinicalTrials, etc."
                 ),
-                fn=partial(
-                    _search_instruments,
-                    api_key=self._api_key,
-                    base_url=self._base_url,
-                ),
+                fn=_run_tool,
                 parameters_schema={
-                    "query": {"type": "string", "description": "Search query"},
-                    "category": {
+                    "name": {
                         "type": "string",
-                        "description": "Filter by category (e.g., microscopy, sequencing)",
+                        "description": "Tool name (e.g. UniProt_get_entry_by_accession)",
                     },
-                    "limit": {"type": "integer", "description": "Max results (default 10)"},
+                    "arguments": {
+                        "type": "object",
+                        "description": "Tool arguments as key-value pairs",
+                    },
                 },
             ),
             AgentTool(
-                name="get_instrument_protocol",
+                name="tu_find_tools",
                 description=(
-                    "Retrieve a standard operating protocol for a specific "
-                    "instrument, including setup steps, parameters, and safety."
+                    "Find relevant scientific tools by description. "
+                    "Searches 2000+ tools by keyword matching."
                 ),
-                fn=partial(
-                    _get_protocol,
-                    api_key=self._api_key,
-                    base_url=self._base_url,
-                ),
+                fn=_find_tools,
                 parameters_schema={
-                    "instrument_id": {"type": "string", "description": "Instrument ID"},
-                    "protocol_type": {
+                    "description": {
                         "type": "string",
-                        "description": "Protocol type (standard, calibration, maintenance)",
+                        "description": "What you need the tool to do",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max results (default 5)",
                     },
                 },
+            ),
+            AgentTool(
+                name="tu_get_spec",
+                description=(
+                    "Get the parameter specification for a tool. "
+                    "Returns OpenAI function-calling format schema."
+                ),
+                fn=_get_tool_spec,
+                parameters_schema={
+                    "tool_name": {
+                        "type": "string",
+                        "description": "Tool name",
+                    },
+                },
+            ),
+            AgentTool(
+                name="tu_list_categories",
+                description="List all ToolUniverse tool categories.",
+                fn=_list_categories,
+                parameters_schema={},
             ),
         ]
 
     async def health_check(self) -> bool:
-        """Check if ToolUniverse API is reachable."""
-        if not self._api_key or not self._base_url:
-            return False
+        """Check if ToolUniverse SDK loads successfully."""
         try:
-            import httpx
-
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(
-                    f"{self._base_url}/api/v1/health",
-                    headers={"Authorization": f"Bearer {self._api_key}"},
-                )
-                return resp.status_code == 200
+            tu = _get_tu()
+            tools = tu.return_all_loaded_tools()
+            return len(tools) > 0
         except Exception:
             return False
 
     def configure(self, **kwargs: Any) -> None:
-        """Update API key or base URL at runtime."""
-        if "api_key" in kwargs:
-            self._api_key = kwargs["api_key"]
-        if "base_url" in kwargs:
-            self._base_url = kwargs["base_url"]
+        """Reset the ToolUniverse singleton."""
+        global _tu_instance  # noqa: PLW0603
+        if kwargs.get("reset"):
+            _tu_instance = None
 
 
 assert isinstance(ToolUniverseSkill(), CloudSkill)

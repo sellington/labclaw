@@ -1,15 +1,21 @@
-"""K-Dense skill — scientific literature retrieval and knowledge synthesis.
+"""K-Dense skill — real integration with K-Dense AI scientific skills.
 
-Provides knowledge-dense retrieval from scientific papers, enabling the
-agent to ground hypotheses and analyses in published literature.
+Uses the claude-skills-mcp server (pip install claude-skills-mcp) via
+the MCP protocol to access 170+ scientific skills covering bioinformatics,
+cheminformatics, clinical research, ML/AI, and lab automation.
 
-Maps to: ASK step (literature context) and HYPOTHESIZE step (prior work).
+The MCP server exposes:
+- find_helpful_skills: semantic search over all skills
+- read_skill_document: retrieve specific skill content
+- list_skills: full inventory
+
+Maps to: ASK step (skill discovery) and GENERAL_REASONING.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import os
 from typing import Any
 
 from labclaw.agents.tools import AgentTool, ToolResult
@@ -17,191 +23,202 @@ from labclaw.skills.base import CloudSkill, SkillCapability, SkillMetadata
 
 logger = logging.getLogger(__name__)
 
+# Cached MCP session
+_mcp_session: Any = None
+_mcp_transport: Any = None
 
-async def _search_literature(
-    query: str,
-    *,
-    max_results: int = 10,
-    year_from: int = 0,
-    year_to: int = 0,
-    api_key: str = "",
-    base_url: str = "",
-) -> ToolResult:
-    """Search scientific literature for papers related to a query."""
+
+async def _ensure_mcp_session() -> Any:
+    """Start the K-Dense MCP server and connect via stdio."""
+    global _mcp_session, _mcp_transport  # noqa: PLW0603
+    if _mcp_session is not None:
+        return _mcp_session
+
     try:
-        import httpx
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
 
-        url = f"{base_url}/api/v1/search" if base_url else ""
-        if not url or not api_key:
+        server_params = StdioServerParameters(
+            command="uvx",
+            args=["claude-skills-mcp"],
+        )
+        transport = stdio_client(server_params)
+        read_stream, write_stream = await transport.__aenter__()
+        session = ClientSession(read_stream, write_stream)
+        await session.initialize()
+
+        _mcp_session = session
+        _mcp_transport = transport
+        logger.info("K-Dense MCP server connected")
+        return session
+    except Exception as exc:
+        logger.warning("K-Dense MCP connection failed: %s", exc)
+        return None
+
+
+async def _find_skills(
+    description: str,
+    *,
+    limit: int = 5,
+) -> ToolResult:
+    """Find relevant scientific skills by description."""
+    try:
+        session = await _ensure_mcp_session()
+        if session is None:
             return ToolResult(
-                success=True,
-                data={
-                    "papers": [],
-                    "note": "K-Dense not configured (set KDENSE_API_KEY)",
-                },
+                success=False,
+                error="K-Dense MCP server not available. Install: pip install claude-skills-mcp",
             )
 
-        params: dict[str, Any] = {"q": query, "limit": max_results}
-        if year_from:
-            params["year_from"] = year_from
-        if year_to:
-            params["year_to"] = year_to
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(
-                url,
-                params=params,
-                headers={"Authorization": f"Bearer {api_key}"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
+        result = await session.call_tool(
+            "find_helpful_skills",
+            arguments={"description": description, "limit": limit},
+        )
         return ToolResult(
             success=True,
             data={
-                "papers": data.get("results", [])[:max_results],
-                "total": data.get("total", 0),
-                "query": query,
+                "skills": result.content if hasattr(result, "content") else str(result),
+                "query": description,
             },
         )
     except Exception as exc:
-        logger.warning("K-Dense literature search failed: %s", exc)
+        logger.warning("K-Dense find_skills failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
 
 
-async def _synthesize_knowledge(
-    topic: str,
-    *,
-    context_papers: list[str] | None = None,
-    api_key: str = "",
-    base_url: str = "",
+async def _read_skill(
+    skill_name: str,
 ) -> ToolResult:
-    """Synthesize knowledge from multiple papers on a topic."""
+    """Read the full content of a specific skill document."""
     try:
-        import httpx
-
-        url = f"{base_url}/api/v1/synthesize" if base_url else ""
-        if not url or not api_key:
+        session = await _ensure_mcp_session()
+        if session is None:
             return ToolResult(
-                success=True,
-                data={
-                    "synthesis": "",
-                    "note": "K-Dense not configured",
-                },
+                success=False,
+                error="K-Dense MCP server not available",
             )
 
-        payload: dict[str, Any] = {"topic": topic}
-        if context_papers:
-            payload["paper_ids"] = context_papers
-
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
-                url,
-                json=payload,
-                headers={"Authorization": f"Bearer {api_key}"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
+        result = await session.call_tool(
+            "read_skill_document",
+            arguments={"skill_name": skill_name},
+        )
         return ToolResult(
             success=True,
             data={
-                "synthesis": data.get("synthesis", ""),
-                "key_findings": data.get("key_findings", []),
-                "cited_papers": data.get("cited_papers", []),
+                "skill_name": skill_name,
+                "content": result.content if hasattr(result, "content") else str(result),
             },
         )
     except Exception as exc:
-        logger.warning("K-Dense synthesis failed: %s", exc)
+        logger.warning("K-Dense read_skill failed: %s", exc)
+        return ToolResult(success=False, error=str(exc))
+
+
+async def _list_all_skills() -> ToolResult:
+    """List all available K-Dense scientific skills."""
+    try:
+        session = await _ensure_mcp_session()
+        if session is None:
+            return ToolResult(
+                success=False,
+                error="K-Dense MCP server not available",
+            )
+
+        result = await session.call_tool("list_skills", arguments={})
+        return ToolResult(
+            success=True,
+            data={
+                "skills": result.content if hasattr(result, "content") else str(result),
+            },
+        )
+    except Exception as exc:
+        logger.warning("K-Dense list_skills failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
 
 
 class KDenseSkill:
-    """K-Dense integration — scientific literature retrieval for the cloud brain."""
+    """Real K-Dense integration — 170+ scientific skills via MCP."""
 
     metadata: SkillMetadata = SkillMetadata(
         name="kdense",
-        version="0.1.0",
-        description="Scientific literature search and knowledge synthesis from papers.",
+        version="0.2.0",
+        description=(
+            "K-Dense AI: 170+ scientific skills, 250+ databases. "
+            "Bioinformatics, cheminformatics, clinical research, "
+            "lab automation, and more via MCP protocol."
+        ),
         capabilities=[
             SkillCapability.LITERATURE_SEARCH,
-            SkillCapability.HYPOTHESIS_GENERATION,
+            SkillCapability.GENERAL_REASONING,
+            SkillCapability.INSTRUMENT_KNOWLEDGE,
         ],
         author="labclaw-core",
-        requires_api_key=True,
-        api_key_env="KDENSE_API_KEY",
+        requires_api_key=False,
     )
 
-    def __init__(self) -> None:
-        self._api_key = os.environ.get("KDENSE_API_KEY", "")
-        self._base_url = os.environ.get("KDENSE_BASE_URL", "")
-
     def get_tools(self) -> list[AgentTool]:
-        """Return agent tools for literature search and synthesis."""
-        from functools import partial
-
+        """Return agent tools for K-Dense access."""
         return [
             AgentTool(
-                name="search_literature",
+                name="kdense_find_skills",
                 description=(
-                    "Search scientific literature for papers related to a query. "
-                    "Returns titles, abstracts, authors, and relevance scores."
+                    "Find relevant scientific skills from "
+                    "K-Dense's 170+ skills library by description."
                 ),
-                fn=partial(
-                    _search_literature,
-                    api_key=self._api_key,
-                    base_url=self._base_url,
-                ),
+                fn=_find_skills,
                 parameters_schema={
-                    "query": {"type": "string", "description": "Search query"},
-                    "max_results": {"type": "integer", "description": "Max papers (default 10)"},
-                    "year_from": {"type": "integer", "description": "Filter by year (start)"},
-                    "year_to": {"type": "integer", "description": "Filter by year (end)"},
+                    "description": {
+                        "type": "string",
+                        "description": "What you need to do",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max results (default 5)",
+                    },
                 },
             ),
             AgentTool(
-                name="synthesize_knowledge",
+                name="kdense_read_skill",
                 description=(
-                    "Synthesize knowledge from scientific papers on a topic. "
-                    "Returns a coherent summary with key findings and citations."
+                    "Read the full content of a K-Dense skill document, including code examples."
                 ),
-                fn=partial(
-                    _synthesize_knowledge,
-                    api_key=self._api_key,
-                    base_url=self._base_url,
-                ),
+                fn=_read_skill,
                 parameters_schema={
-                    "topic": {"type": "string", "description": "Topic to synthesize"},
-                    "context_papers": {
-                        "type": "array",
-                        "description": "Paper IDs to include in synthesis",
+                    "skill_name": {
+                        "type": "string",
+                        "description": "Skill name to read",
                     },
                 },
+            ),
+            AgentTool(
+                name="kdense_list_skills",
+                description="List all available K-Dense skills.",
+                fn=_list_all_skills,
+                parameters_schema={},
             ),
         ]
 
     async def health_check(self) -> bool:
-        """Check if K-Dense API is reachable."""
-        if not self._api_key or not self._base_url:
-            return False
+        """Check if K-Dense MCP server can be started."""
         try:
-            import httpx
-
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(
-                    f"{self._base_url}/api/v1/health",
-                    headers={"Authorization": f"Bearer {self._api_key}"},
-                )
-                return resp.status_code == 200
+            session = await _ensure_mcp_session()
+            return session is not None
         except Exception:
             return False
 
     def configure(self, **kwargs: Any) -> None:
-        """Update API key or base URL."""
-        if "api_key" in kwargs:
-            self._api_key = kwargs["api_key"]
-        if "base_url" in kwargs:
-            self._base_url = kwargs["base_url"]
+        """Reset MCP session."""
+        global _mcp_session, _mcp_transport  # noqa: PLW0603
+        if kwargs.get("reset"):
+            if _mcp_transport is not None:
+                try:
+                    asyncio.get_event_loop().run_until_complete(
+                        _mcp_transport.__aexit__(None, None, None)
+                    )
+                except Exception:
+                    pass
+            _mcp_session = None
+            _mcp_transport = None
 
 
 assert isinstance(KDenseSkill(), CloudSkill)

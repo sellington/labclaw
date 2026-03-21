@@ -1,15 +1,15 @@
-"""Biomni skill — biomedical multimodal AI analysis.
+"""Biomni skill — real integration with Stanford SNAP Biomni agent.
 
-Wraps the Biomni API for biomedical image analysis, molecular interpretation,
-and multi-omics data reasoning.
+Uses the biomni Python package (pip install biomni) which provides
+an autonomous biomedical AI agent with 150+ specialized tools
+covering 59 databases across biology, chemistry, and medicine.
 
-Maps to: ANALYZE step (biomedical data interpretation).
+Maps to: ANALYZE step (biomedical data interpretation) and GENERAL_REASONING.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
 from labclaw.agents.tools import AgentTool, ToolResult
@@ -17,184 +17,178 @@ from labclaw.skills.base import CloudSkill, SkillCapability, SkillMetadata
 
 logger = logging.getLogger(__name__)
 
+# Lazy-loaded singleton
+_biomni_agent: Any = None
 
-async def _analyze_biomedical(
+
+def _get_agent(
+    llm: str = "claude-sonnet-4-20250514",
+    data_path: str = "./data",
+) -> Any:
+    """Get or create the Biomni A1 agent singleton."""
+    global _biomni_agent  # noqa: PLW0603
+    if _biomni_agent is None:
+        from biomni.agent import A1
+
+        _biomni_agent = A1(path=data_path, llm=llm)
+        logger.info("Biomni A1 agent initialized with LLM=%s", llm)
+    return _biomni_agent
+
+
+async def _biomni_go(
     query: str,
     *,
-    data_type: str = "general",
-    context: str = "",
-    api_key: str = "",
-    base_url: str = "",
+    llm: str = "claude-sonnet-4-20250514",
+    data_path: str = "./data",
 ) -> ToolResult:
-    """Analyze biomedical data or images using Biomni."""
+    """Run a biomedical query through Biomni's autonomous agent."""
     try:
-        import httpx
-
-        url = f"{base_url}/api/v1/analyze" if base_url else ""
-        if not url or not api_key:
-            return ToolResult(
-                success=True,
-                data={
-                    "analysis": "",
-                    "note": "Biomni not configured (set BIOMNI_API_KEY)",
-                },
-            )
-
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
-                url,
-                json={
-                    "query": query,
-                    "data_type": data_type,
-                    "context": context,
-                },
-                headers={"Authorization": f"Bearer {api_key}"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        agent = _get_agent(llm=llm, data_path=data_path)
+        result = agent.go(query)
 
         return ToolResult(
             success=True,
             data={
-                "analysis": data.get("analysis", ""),
-                "confidence": data.get("confidence", 0.0),
-                "references": data.get("references", []),
-                "data_type": data_type,
+                "result": str(result)[:5000],
+                "query": query,
+                "llm": llm,
             },
         )
     except Exception as exc:
-        logger.warning("Biomni analysis failed: %s", exc)
+        logger.warning("Biomni go() failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
 
 
-async def _interpret_results(
-    results: list[dict[str, Any]],
-    *,
-    domain: str = "neuroscience",
-    api_key: str = "",
-    base_url: str = "",
-) -> ToolResult:
-    """Interpret experimental results through a biomedical lens."""
+async def _biomni_list_tools() -> ToolResult:
+    """List all custom tools registered in Biomni."""
     try:
-        import httpx
-
-        url = f"{base_url}/api/v1/interpret" if base_url else ""
-        if not url or not api_key:
-            return ToolResult(
-                success=True,
-                data={
-                    "interpretation": "",
-                    "note": "Biomni not configured",
-                },
-            )
-
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
-                url,
-                json={"results": results, "domain": domain},
-                headers={"Authorization": f"Bearer {api_key}"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
+        agent = _get_agent()
+        custom_tools = agent.list_custom_tools()
         return ToolResult(
             success=True,
-            data={
-                "interpretation": data.get("interpretation", ""),
-                "biological_significance": data.get("significance", ""),
-                "suggested_followup": data.get("followup", []),
-            },
+            data={"tools": custom_tools},
         )
     except Exception as exc:
-        logger.warning("Biomni interpretation failed: %s", exc)
+        logger.warning("Biomni list_tools failed: %s", exc)
+        return ToolResult(success=False, error=str(exc))
+
+
+async def _biomni_add_data(
+    name: str,
+    *,
+    path: str = "",
+    description: str = "",
+) -> ToolResult:
+    """Add custom data to Biomni's data lake."""
+    try:
+        agent = _get_agent()
+        agent.add_data(name=name, path=path, description=description)
+        return ToolResult(
+            success=True,
+            data={"added": name, "path": path},
+        )
+    except Exception as exc:
+        logger.warning("Biomni add_data failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
 
 
 class BiomniSkill:
-    """Biomni integration — biomedical AI analysis for the cloud brain."""
+    """Real Biomni integration — autonomous biomedical AI agent."""
 
     metadata: SkillMetadata = SkillMetadata(
         name="biomni",
-        version="0.1.0",
-        description="Biomedical multimodal analysis and result interpretation.",
-        capabilities=[SkillCapability.DATA_ANALYSIS, SkillCapability.GENERAL_REASONING],
+        version="0.2.0",
+        description=(
+            "Stanford SNAP Biomni: autonomous biomedical AI agent "
+            "with 150+ tools across 59 databases."
+        ),
+        capabilities=[
+            SkillCapability.DATA_ANALYSIS,
+            SkillCapability.GENERAL_REASONING,
+            SkillCapability.HYPOTHESIS_GENERATION,
+        ],
         author="labclaw-core",
         requires_api_key=True,
-        api_key_env="BIOMNI_API_KEY",
+        api_key_env="ANTHROPIC_API_KEY",
     )
 
-    def __init__(self) -> None:
-        self._api_key = os.environ.get("BIOMNI_API_KEY", "")
-        self._base_url = os.environ.get("BIOMNI_BASE_URL", "")
+    def __init__(
+        self,
+        llm: str = "claude-sonnet-4-20250514",
+        data_path: str = "./data",
+    ) -> None:
+        self._llm = llm
+        self._data_path = data_path
 
     def get_tools(self) -> list[AgentTool]:
-        """Return agent tools for biomedical analysis."""
+        """Return agent tools for Biomni access."""
         from functools import partial
 
         return [
             AgentTool(
-                name="analyze_biomedical",
+                name="biomni_go",
                 description=(
-                    "Analyze biomedical data using Biomni AI. Supports imaging, "
-                    "molecular, genomic, and multi-omics data interpretation."
+                    "Run a biomedical query through Biomni's "
+                    "autonomous AI agent. Handles multi-step "
+                    "reasoning across 150+ bio tools and 59 DBs."
                 ),
                 fn=partial(
-                    _analyze_biomedical,
-                    api_key=self._api_key,
-                    base_url=self._base_url,
+                    _biomni_go,
+                    llm=self._llm,
+                    data_path=self._data_path,
                 ),
                 parameters_schema={
-                    "query": {"type": "string", "description": "Analysis query"},
-                    "data_type": {
+                    "query": {
                         "type": "string",
-                        "description": "Data type (imaging, molecular, genomic, general)",
+                        "description": "Biomedical question or task",
                     },
-                    "context": {"type": "string", "description": "Additional context"},
                 },
             ),
             AgentTool(
-                name="interpret_results",
-                description=(
-                    "Interpret experimental results through a biomedical lens. "
-                    "Provides biological significance and suggested follow-ups."
-                ),
-                fn=partial(
-                    _interpret_results,
-                    api_key=self._api_key,
-                    base_url=self._base_url,
-                ),
+                name="biomni_list_tools",
+                description="List custom tools in Biomni agent.",
+                fn=_biomni_list_tools,
+                parameters_schema={},
+            ),
+            AgentTool(
+                name="biomni_add_data",
+                description=("Add custom data to Biomni's data lake for analysis."),
+                fn=_biomni_add_data,
                 parameters_schema={
-                    "results": {"type": "array", "description": "Experimental result dicts"},
-                    "domain": {
+                    "name": {
                         "type": "string",
-                        "description": "Domain (neuroscience, genomics, etc.)",
+                        "description": "Dataset name",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "File path to data",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Dataset description",
                     },
                 },
             ),
         ]
 
     async def health_check(self) -> bool:
-        """Check if Biomni API is reachable."""
-        if not self._api_key or not self._base_url:
-            return False
+        """Check if Biomni can be imported."""
         try:
-            import httpx
+            from biomni.agent import A1  # noqa: F401
 
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(
-                    f"{self._base_url}/api/v1/health",
-                    headers={"Authorization": f"Bearer {self._api_key}"},
-                )
-                return resp.status_code == 200
-        except Exception:
+            return True
+        except ImportError:
             return False
 
     def configure(self, **kwargs: Any) -> None:
-        """Update API key or base URL."""
-        if "api_key" in kwargs:
-            self._api_key = kwargs["api_key"]
-        if "base_url" in kwargs:
-            self._base_url = kwargs["base_url"]
+        """Update LLM model or data path."""
+        global _biomni_agent  # noqa: PLW0603
+        if "llm" in kwargs:
+            self._llm = kwargs["llm"]
+            _biomni_agent = None
+        if "data_path" in kwargs:
+            self._data_path = kwargs["data_path"]
+            _biomni_agent = None
 
 
 assert isinstance(BiomniSkill(), CloudSkill)
