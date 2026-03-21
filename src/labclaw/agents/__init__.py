@@ -24,19 +24,35 @@ __all__ = [
 ]
 
 
+def _collect_skill_tools() -> list[AgentTool]:
+    """Collect tools from all registered cloud skills."""
+    try:
+        from labclaw.skills.registry import skill_registry
+
+        return skill_registry.get_all_tools()
+    except Exception:
+        return []
+
+
 def create_lab_assistant(
     llm: object,
     *,
     memory_root: object | None = None,
     device_registry: object | None = None,
     evolution_engine: object | None = None,
+    include_skills: bool = True,
 ) -> AgentRuntime:
-    """Factory: create a Lab Assistant agent with all built-in tools."""
+    """Factory: create a Lab Assistant agent with all built-in tools.
+
+    When include_skills is True, also registers tools from cloud skills.
+    """
     tools = build_builtin_tools(
         memory_root=memory_root,
         device_registry=device_registry,
         evolution_engine=evolution_engine,
     )
+    if include_skills:
+        tools.extend(_collect_skill_tools())
     return AgentRuntime(llm_provider=llm, tools=tools)
 
 
@@ -46,11 +62,17 @@ def create_experiment_designer(
     memory_root: object | None = None,
     device_registry: object | None = None,
     evolution_engine: object | None = None,
+    include_skills: bool = True,
 ) -> AgentRuntime:
-    """Factory: create an Experiment Designer agent with all built-in tools."""
+    """Factory: create an Experiment Designer agent with all built-in tools.
+
+    When include_skills is True, also registers tools from cloud skills.
+    """
     tools = build_builtin_tools(
         memory_root=memory_root,
         device_registry=device_registry,
         evolution_engine=evolution_engine,
     )
+    if include_skills:
+        tools.extend(_collect_skill_tools())
     return AgentRuntime(llm_provider=llm, tools=tools)

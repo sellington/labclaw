@@ -51,6 +51,8 @@ def main() -> None:
         mcp_main()
     elif cmd == "plugin":
         _plugin_cmd(sys.argv[2:])
+    elif cmd == "skills":
+        _skills_cmd(sys.argv[2:])
     elif cmd == "pipeline":
         _pipeline_cmd(sys.argv[2:])
     elif cmd == "ablation":
@@ -70,6 +72,7 @@ def main() -> None:
         print("  init           Scaffold a new LabClaw project directory")
         print("  mcp            Start MCP server (stdio transport)")
         print("  plugin         Manage plugins (see: labclaw plugin --help)")
+        print("  skills         Manage cloud brain skills (see: labclaw skills --help)")
         print("  pipeline       Run one discovery cycle on CSV data and print JSON result")
         print("  ablation       Run full vs no-evolution comparison and print JSON result")
         print("  memory         Query or inspect persisted memory")
@@ -281,6 +284,81 @@ def _plugin_cmd(args: list[str]) -> None:
         print("  create <name>             Scaffold a new plugin project")
         print("    --type device|domain|analysis  Plugin type (default: domain)")
         print("    --out DIR                      Output directory (default: .)")
+
+
+def _skills_cmd(args: list[str]) -> None:
+    """Dispatch skills sub-commands."""
+    sub = args[0] if args else ""
+
+    if sub == "list":
+        from labclaw.skills.registry import skill_registry
+
+        skills = skill_registry.list_skills()
+        if not skills:
+            print("No skills registered. Register built-in skills with: labclaw skills register")
+            return
+        print(f"{'NAME':<20} {'VERSION':<10} {'CAPABILITIES':<40} DESCRIPTION")
+        print("-" * 100)
+        for m in skills:
+            caps = ", ".join(c.value for c in m.capabilities)
+            print(f"{m.name:<20} {m.version:<10} {caps:<40} {m.description}")
+
+    elif sub == "register":
+        from labclaw.skills.registry import skill_registry
+
+        registered: list[str] = []
+        skill_classes = _get_builtin_skills()
+        for cls in skill_classes:
+            try:
+                skill = cls()
+                skill_registry.register(skill)
+                registered.append(skill.metadata.name)
+            except ValueError:
+                pass  # Already registered
+        print(f"Registered {len(registered)} skills: {', '.join(registered)}")
+
+    elif sub == "tools":
+        from labclaw.skills.registry import skill_registry
+
+        tools = skill_registry.get_all_tools()
+        if not tools:
+            print("No skill tools available. Register skills first: labclaw skills register")
+            return
+        print(f"{'TOOL':<30} DESCRIPTION")
+        print("-" * 80)
+        for t in tools:
+            print(f"{t.name:<30} {t.description[:50]}")
+
+    elif sub == "health":
+        from labclaw.skills.registry import skill_registry
+
+        results = asyncio.run(skill_registry.health_check_all())
+        if not results:
+            print("No skills registered.")
+            return
+        for name, healthy in results.items():
+            status = "OK" if healthy else "UNAVAILABLE"
+            print(f"  {name}: {status}")
+
+    else:
+        print("Usage: labclaw skills <subcommand>")
+        print()
+        print("Subcommands:")
+        print("  list            List all registered cloud skills")
+        print("  register        Register built-in skills")
+        print("  tools           List all tools provided by skills")
+        print("  health          Run health checks on all skills")
+
+
+def _get_builtin_skills() -> list[type]:
+    """Return all built-in skill classes."""
+    from labclaw.skills.biomni import BiomniSkill
+    from labclaw.skills.kdense import KDenseSkill
+    from labclaw.skills.lifesci import LifeSciSkill
+    from labclaw.skills.tooluniverse import ToolUniverseSkill
+    from labclaw.skills.write import WriteSkill
+
+    return [ToolUniverseSkill, KDenseSkill, BiomniSkill, WriteSkill, LifeSciSkill]
 
 
 def _pipeline_cmd(args: list[str]) -> None:

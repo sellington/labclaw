@@ -27,6 +27,7 @@ from labclaw.api.routers.orchestrator import router as orchestrator_router
 from labclaw.api.routers.plugins import router as plugins_router
 from labclaw.api.routers.provenance import router as provenance_router
 from labclaw.api.routers.sessions import router as sessions_router
+from labclaw.api.routers.skills import router as skills_router
 
 logger = logging.getLogger("labclaw.api")
 
@@ -118,6 +119,12 @@ app.include_router(
     provenance_router,
     prefix="/api/provenance",
     tags=["provenance"],
+    dependencies=_secure_dep,
+)
+app.include_router(
+    skills_router,
+    prefix="/api/skills",
+    tags=["skills"],
     dependencies=_secure_dep,
 )
 
