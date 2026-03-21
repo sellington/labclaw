@@ -184,9 +184,12 @@ def store_findings_in_memory(
             memory_context["db_path"],
         )
         await mgr.init()
-        for i in range(n_findings):
-            await mgr.store_finding(_make_finding(i))
-        return len(mgr._findings)
+        try:
+            for i in range(n_findings):
+                await mgr.store_finding(_make_finding(i))
+            return len(mgr._findings)
+        finally:
+            await mgr.close()
 
     return asyncio.run(_store())
 
@@ -207,7 +210,10 @@ def restart_memory_manager(
             memory_context["db_path"],
         )
         await mgr2.init()
-        return await mgr2.retrieve_findings()
+        try:
+            return await mgr2.retrieve_findings()
+        finally:
+            await mgr2.close()
 
     return asyncio.run(_retrieve())
 
