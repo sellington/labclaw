@@ -2,18 +2,91 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi.responses import JSONResponse
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from labclaw.skills.base import SkillMetadata
 from labclaw.skills.registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+MAX_RESPONSE_SIZE = 100_000  # 100KB
+MAX_REQUEST_SIZE = 1_048_576  # 1MB
+
+# ---------------------------------------------------------------------------
+# API Key Authentication
+# ---------------------------------------------------------------------------
+
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+def _get_valid_keys() -> set[str]:
+    """Load valid API keys from env."""
+    raw = os.environ.get("LABCLAW_API_KEYS", "")
+    if not raw:
+        return set()  # No auth if no keys configured
+    return {k.strip() for k in raw.split(",") if k.strip()}
+
+
+async def _verify_api_key(
+    api_key: str | None = Security(_api_key_header),
+) -> str:
+    """Validate API key from header against configured keys."""
+    keys = _get_valid_keys()
+    if not keys:
+        return "anonymous"  # No auth configured = open access
+    if not api_key or api_key not in keys:
+        raise HTTPException(status_code=403, detail="Invalid or missing API key")
+    return api_key
+
+
+# ---------------------------------------------------------------------------
+# Rate Limiting
+# ---------------------------------------------------------------------------
+
+
+def _rate_limit_key(request: Request) -> str:
+    """Key function for rate limiting: use API key if present, else IP."""
+    return request.headers.get("X-API-Key", get_remote_address(request))
+
+
+limiter = Limiter(key_func=_rate_limit_key)
+
+
+# ---------------------------------------------------------------------------
+# Request Size Middleware
+# ---------------------------------------------------------------------------
+
+
+class _RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+    """Reject requests with Content-Length exceeding MAX_REQUEST_SIZE."""
+
+    async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > MAX_REQUEST_SIZE:
+            return JSONResponse(
+                status_code=413,
+                content={"detail": "Request body too large"},
+            )
+        return await call_next(request)
+
 
 # ---------------------------------------------------------------------------
 # Request / response models
@@ -93,7 +166,16 @@ app = FastAPI(
     title="Cloud Brain",
     description="Unified API for all scientific AI skills",
     lifespan=_lifespan,
+    dependencies=[Depends(_verify_api_key)],
 )
+
+app.state.limiter = limiter
+app.add_middleware(_RequestSizeLimitMiddleware)
+
+
+@app.exception_handler(RateLimitExceeded)
+async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
 
 
 # ---------------------------------------------------------------------------
@@ -102,13 +184,15 @@ app = FastAPI(
 
 
 @app.get("/brain/skills", response_model=list[SkillMetadata])
-async def list_skills() -> list[SkillMetadata]:
+@limiter.limit("120/minute")
+async def list_skills(request: Request) -> list[SkillMetadata]:
     """List all registered skills."""
     return _registry.list_skills()
 
 
 @app.get("/brain/tools", response_model=list[ToolInfo])
-async def list_tools() -> list[ToolInfo]:
+@limiter.limit("120/minute")
+async def list_tools(request: Request) -> list[ToolInfo]:
     """List all tools across all skills."""
     tools = _registry.get_all_tools()
     return [
@@ -122,13 +206,15 @@ async def list_tools() -> list[ToolInfo]:
 
 
 @app.get("/brain/health")
-async def health_check() -> dict[str, bool]:
+@limiter.limit("120/minute")
+async def health_check(request: Request) -> dict[str, bool]:
     """Health check all skills."""
     return await _registry.health_check_all()
 
 
 @app.post("/brain/execute", response_model=ExecuteResponse)
-async def execute_tool(req: ExecuteRequest) -> ExecuteResponse:
+@limiter.limit("60/minute")
+async def execute_tool(request: Request, req: ExecuteRequest) -> ExecuteResponse:
     """Execute any tool by name."""
     tools = _registry.get_all_tools()
     tool_map = {t.name: t for t in tools}
@@ -141,6 +227,16 @@ async def execute_tool(req: ExecuteRequest) -> ExecuteResponse:
 
     tool = tool_map[req.tool_name]
     result = await tool.execute(**req.arguments)
+
+    # Truncate oversized responses
+    result_json = json.dumps(result.data, default=str)
+    if len(result_json) > MAX_RESPONSE_SIZE:
+        result.data = {
+            "truncated": True,
+            "size": len(result_json),
+            "preview": result_json[:MAX_RESPONSE_SIZE],
+        }
+
     return ExecuteResponse(
         success=result.success,
         data=result.data,
@@ -149,7 +245,8 @@ async def execute_tool(req: ExecuteRequest) -> ExecuteResponse:
 
 
 @app.get("/brain/inventory", response_model=InventoryResponse)
-async def inventory() -> InventoryResponse:
+@limiter.limit("120/minute")
+async def inventory(request: Request) -> InventoryResponse:
     """Full inventory with categories and tool counts."""
     skills = _registry.list_skills()
     all_tools = _registry.get_all_tools()

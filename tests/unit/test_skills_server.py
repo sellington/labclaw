@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 from unittest.mock import patch
 
@@ -11,12 +12,16 @@ from fastapi.testclient import TestClient
 from labclaw.agents.tools import AgentTool, ToolResult
 from labclaw.skills.base import SkillCapability, SkillMetadata
 from labclaw.skills.server import (
+    MAX_REQUEST_SIZE,
+    MAX_RESPONSE_SIZE,
     ExecuteRequest,
     ExecuteResponse,
     InventoryCategory,
     InventoryResponse,
     ToolInfo,
+    _get_valid_keys,
     _registry,
+    _verify_api_key,
     app,
 )
 
@@ -31,6 +36,12 @@ async def _stub_fn(**kwargs: Any) -> ToolResult:
 
 async def _failing_fn(**kwargs: Any) -> ToolResult:
     return ToolResult(success=False, error="boom")
+
+
+async def _large_fn(**kwargs: Any) -> ToolResult:
+    """Return a result larger than MAX_RESPONSE_SIZE."""
+    big_data = {"payload": "x" * (MAX_RESPONSE_SIZE + 1000)}
+    return ToolResult(success=True, data=big_data)
 
 
 class FakeSkillA:
@@ -91,6 +102,32 @@ class FakeSkillB:
         pass
 
 
+class FakeSkillLarge:
+    """Skill with a tool that returns large responses."""
+
+    metadata = SkillMetadata(
+        name="large",
+        version="0.1.0",
+        description="Large response skill",
+        capabilities=[SkillCapability.DATA_ANALYSIS],
+    )
+
+    def get_tools(self) -> list[AgentTool]:
+        return [
+            AgentTool(
+                name="large_tool",
+                description="Returns large data",
+                fn=_large_fn,
+            ),
+        ]
+
+    async def health_check(self) -> bool:
+        return True
+
+    def configure(self, **kwargs: Any) -> None:
+        pass
+
+
 class BrokenToolsSkill:
     """Skill whose get_tools() raises."""
 
@@ -129,8 +166,27 @@ def _populated_registry():
 
 
 @pytest.fixture()
+def _populated_registry_with_large():
+    """Populate registry with fake skills including the large-response skill."""
+    old_skills = dict(_registry._skills)
+    _registry._skills.clear()
+    _registry._skills["alpha"] = FakeSkillA()
+    _registry._skills["beta"] = FakeSkillB()
+    _registry._skills["large"] = FakeSkillLarge()
+    yield
+    _registry._skills.clear()
+    _registry._skills.update(old_skills)
+
+
+@pytest.fixture()
 def client(_populated_registry):
     """TestClient with fake skills loaded (startup event skipped)."""
+    return TestClient(app, raise_server_exceptions=False)
+
+
+@pytest.fixture()
+def client_with_large(_populated_registry_with_large):
+    """TestClient with fake skills including large-response skill."""
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -476,3 +532,226 @@ class TestEmptyRegistry:
         assert data["categories"] == []
         _registry._skills.clear()
         _registry._skills.update(old_skills)
+
+
+# ---------------------------------------------------------------------------
+# API Key Authentication
+# ---------------------------------------------------------------------------
+
+
+class TestAPIKeyAuth:
+    def test_no_keys_configured_allows_access(self, client: TestClient) -> None:
+        """Without LABCLAW_API_KEYS env, all requests pass (open access)."""
+        resp = client.get("/brain/skills")
+        assert resp.status_code == 200
+
+    def test_valid_key_allows_access(self, _populated_registry) -> None:
+        """Valid API key returns 200."""
+        with patch.dict("os.environ", {"LABCLAW_API_KEYS": "key-abc,key-def"}):
+            c = TestClient(app, raise_server_exceptions=False)
+            resp = c.get("/brain/skills", headers={"X-API-Key": "key-abc"})
+            assert resp.status_code == 200
+
+    def test_invalid_key_returns_403(self, _populated_registry) -> None:
+        """Invalid API key returns 403."""
+        with patch.dict("os.environ", {"LABCLAW_API_KEYS": "key-abc,key-def"}):
+            c = TestClient(app, raise_server_exceptions=False)
+            resp = c.get("/brain/skills", headers={"X-API-Key": "wrong-key"})
+            assert resp.status_code == 403
+            assert "Invalid or missing API key" in resp.json()["detail"]
+
+    def test_missing_key_returns_403(self, _populated_registry) -> None:
+        """No API key header when keys are configured returns 403."""
+        with patch.dict("os.environ", {"LABCLAW_API_KEYS": "key-abc"}):
+            c = TestClient(app, raise_server_exceptions=False)
+            resp = c.get("/brain/skills")
+            assert resp.status_code == 403
+
+    def test_auth_applies_to_post(self, _populated_registry) -> None:
+        """Auth also guards POST endpoints."""
+        with patch.dict("os.environ", {"LABCLAW_API_KEYS": "key-abc"}):
+            c = TestClient(app, raise_server_exceptions=False)
+            resp = c.post(
+                "/brain/execute",
+                json={"tool_name": "alpha_search", "arguments": {"query": "test"}},
+            )
+            assert resp.status_code == 403
+
+    def test_auth_post_with_valid_key(self, _populated_registry) -> None:
+        """POST with valid key succeeds."""
+        with patch.dict("os.environ", {"LABCLAW_API_KEYS": "key-abc"}):
+            c = TestClient(app, raise_server_exceptions=False)
+            resp = c.post(
+                "/brain/execute",
+                json={"tool_name": "alpha_search", "arguments": {"query": "test"}},
+                headers={"X-API-Key": "key-abc"},
+            )
+            assert resp.status_code == 200
+            assert resp.json()["success"] is True
+
+    def test_get_valid_keys_empty_string(self) -> None:
+        """Empty LABCLAW_API_KEYS returns empty set."""
+        with patch.dict("os.environ", {"LABCLAW_API_KEYS": ""}):
+            assert _get_valid_keys() == set()
+
+    def test_get_valid_keys_strips_whitespace(self) -> None:
+        """Keys are stripped of whitespace."""
+        with patch.dict("os.environ", {"LABCLAW_API_KEYS": " key1 , key2 , "}):
+            assert _get_valid_keys() == {"key1", "key2"}
+
+    def test_get_valid_keys_unset(self) -> None:
+        """Unset LABCLAW_API_KEYS returns empty set."""
+        with patch.dict("os.environ", {}, clear=True):
+            assert _get_valid_keys() == set()
+
+    @pytest.mark.asyncio
+    async def test_verify_api_key_anonymous(self) -> None:
+        """No keys configured returns 'anonymous'."""
+        with patch.dict("os.environ", {}, clear=True):
+            result = await _verify_api_key(api_key=None)
+            assert result == "anonymous"
+
+    @pytest.mark.asyncio
+    async def test_verify_api_key_valid(self) -> None:
+        """Valid key returns the key."""
+        with patch.dict("os.environ", {"LABCLAW_API_KEYS": "test-key"}):
+            result = await _verify_api_key(api_key="test-key")
+            assert result == "test-key"
+
+    @pytest.mark.asyncio
+    async def test_verify_api_key_invalid(self) -> None:
+        """Invalid key raises HTTPException(403)."""
+        from fastapi import HTTPException
+
+        with (
+            patch.dict("os.environ", {"LABCLAW_API_KEYS": "test-key"}),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await _verify_api_key(api_key="bad-key")
+        assert exc_info.value.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Response Size Limits
+# ---------------------------------------------------------------------------
+
+
+class TestResponseSizeLimits:
+    def test_large_response_is_truncated(self, client_with_large: TestClient) -> None:
+        """Responses exceeding MAX_RESPONSE_SIZE are truncated."""
+        resp = client_with_large.post(
+            "/brain/execute",
+            json={"tool_name": "large_tool", "arguments": {}},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert data["data"]["truncated"] is True
+        assert data["data"]["size"] > MAX_RESPONSE_SIZE
+        assert len(data["data"]["preview"]) == MAX_RESPONSE_SIZE
+
+    def test_normal_response_not_truncated(self, client: TestClient) -> None:
+        """Normal-sized responses are not truncated."""
+        resp = client.post(
+            "/brain/execute",
+            json={"tool_name": "alpha_search", "arguments": {"query": "test"}},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert "truncated" not in (data["data"] or {})
+
+
+# ---------------------------------------------------------------------------
+# Request Size Limits
+# ---------------------------------------------------------------------------
+
+
+class TestRequestSizeLimits:
+    def test_oversized_request_returns_413(self, _populated_registry) -> None:
+        """Request with Content-Length > MAX_REQUEST_SIZE returns 413."""
+        c = TestClient(app, raise_server_exceptions=False)
+        huge_body = "x" * (MAX_REQUEST_SIZE + 1)
+        resp = c.post(
+            "/brain/execute",
+            content=huge_body,
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": str(len(huge_body)),
+            },
+        )
+        assert resp.status_code == 413
+        assert "Request body too large" in resp.json()["detail"]
+
+    def test_normal_request_passes(self, client: TestClient) -> None:
+        """Normal-sized request passes the middleware."""
+        body = json.dumps({"tool_name": "alpha_search", "arguments": {"query": "ok"}})
+        resp = client.post(
+            "/brain/execute",
+            content=body,
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Rate Limiting
+# ---------------------------------------------------------------------------
+
+
+class TestRateLimiting:
+    def test_rate_limit_key_with_api_key(self) -> None:
+        """Rate limit key uses X-API-Key if present."""
+        # Create a mock request-like object
+        from unittest.mock import MagicMock
+
+        from labclaw.skills.server import _rate_limit_key
+
+        request = MagicMock()
+        request.headers = {"X-API-Key": "my-key"}
+        assert _rate_limit_key(request) == "my-key"
+
+    def test_rate_limit_key_falls_back_to_ip(self) -> None:
+        """Rate limit key falls back to remote address when no API key."""
+        from unittest.mock import MagicMock
+
+        from labclaw.skills.server import _rate_limit_key
+
+        request = MagicMock()
+        request.headers = {}
+        request.client.host = "1.2.3.4"
+        # get_remote_address uses request.client.host
+        result = _rate_limit_key(request)
+        # Without X-API-Key, falls back to get_remote_address
+        assert result is not None
+
+    def test_rate_limit_handler_exists(self) -> None:
+        """App has a rate limit exception handler registered."""
+        from slowapi.errors import RateLimitExceeded
+
+        handlers = app.exception_handlers
+        assert RateLimitExceeded in handlers
+
+    def test_limiter_attached_to_app(self) -> None:
+        """Limiter is attached to app.state."""
+        from labclaw.skills.server import limiter
+
+        assert app.state.limiter is limiter
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_handler_returns_429(self) -> None:
+        """The rate limit exception handler returns a 429 JSONResponse."""
+        from unittest.mock import MagicMock
+
+        from slowapi.errors import RateLimitExceeded
+
+        from labclaw.skills.server import _rate_limit_handler
+
+        request = MagicMock()
+        # RateLimitExceeded expects a Limit object; mock it
+        mock_limit = MagicMock()
+        mock_limit.error_message = None
+        exc = RateLimitExceeded(mock_limit)
+        response = await _rate_limit_handler(request, exc)
+        assert response.status_code == 429
+        assert b"Rate limit exceeded" in response.body
