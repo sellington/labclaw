@@ -207,6 +207,33 @@ select option{background:var(--card);color:var(--text)}
 .footer a{color:var(--blue);text-decoration:none}
 .footer a:hover{text-decoration:underline}
 
+/* top nav */
+.top-nav{
+  position:sticky;top:0;z-index:100;
+  background:rgba(17,19,25,0.85);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-bottom:1px solid rgba(100,116,139,0.1);
+}
+.nav-inner{
+  max-width:1200px;margin:0 auto;padding:0.7rem 1.5rem;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.nav-brand{
+  font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:1.1rem;
+  background:linear-gradient(135deg,var(--blue),var(--purple));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  text-decoration:none;
+}
+.nav-links{display:flex;gap:0.25rem}
+.nav-link{
+  padding:0.4rem 0.85rem;border-radius:0.5rem;
+  font-size:0.82rem;font-weight:600;color:var(--text-dim);
+  text-decoration:none;transition:all 0.2s;
+  font-family:'Plus Jakarta Sans',sans-serif;
+}
+.nav-link:hover{color:var(--text);background:rgba(100,116,139,0.1)}
+.nav-link.active{color:var(--blue);background:rgba(37,99,235,0.1)}
+
 /* fade-in */
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 .fade-in{animation:fadeUp 0.5s ease-out both}
@@ -218,6 +245,19 @@ select option{background:var(--card);color:var(--text)}
 </style>
 </head>
 <body>
+
+<!-- Top Navigation -->
+<nav class="top-nav">
+  <div class="nav-inner">
+    <a href="brain.html" class="nav-brand">&#x1F9E0; Cloud Brain</a>
+    <div class="nav-links">
+      <a href="brain.html" class="nav-link active">Dashboard</a>
+      <a href="explorer.html" class="nav-link">Explorer</a>
+      <a href="playground.html" class="nav-link">Playground</a>
+      <a href="docs.html" class="nav-link">Docs</a>
+    </div>
+  </div>
+</nav>
 
 <div class="container">
 

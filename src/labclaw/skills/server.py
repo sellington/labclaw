@@ -193,11 +193,38 @@ _STATIC_DIR = Path(__file__).parent / "static"
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def serve_ui() -> HTMLResponse:
-    """Serve the Cloud Brain web UI."""
+    """Serve the Cloud Brain dashboard."""
     html_path = _STATIC_DIR / "brain.html"
     if html_path.exists():
         return HTMLResponse(html_path.read_text())
     return HTMLResponse("<h1>Cloud Brain</h1><p>UI not found.</p>")
+
+
+@app.get("/explorer", response_class=HTMLResponse, include_in_schema=False)
+async def serve_explorer() -> HTMLResponse:
+    """Serve the Tool Explorer page."""
+    html_path = _STATIC_DIR / "explorer.html"
+    if html_path.exists():
+        return HTMLResponse(html_path.read_text())
+    return HTMLResponse("<h1>Tool Explorer</h1><p>Coming soon.</p>")
+
+
+@app.get("/playground", response_class=HTMLResponse, include_in_schema=False)
+async def serve_playground() -> HTMLResponse:
+    """Serve the Query Playground page."""
+    html_path = _STATIC_DIR / "playground.html"
+    if html_path.exists():
+        return HTMLResponse(html_path.read_text())
+    return HTMLResponse("<h1>Query Playground</h1><p>Coming soon.</p>")
+
+
+@app.get("/api-docs", response_class=HTMLResponse, include_in_schema=False)
+async def serve_api_docs() -> HTMLResponse:
+    """Serve the API Documentation page."""
+    html_path = _STATIC_DIR / "docs.html"
+    if html_path.exists():
+        return HTMLResponse(html_path.read_text())
+    return HTMLResponse("<h1>API Docs</h1><p>Coming soon.</p>")
 
 
 # ---------------------------------------------------------------------------
