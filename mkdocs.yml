@@ -84,6 +84,11 @@ nav:
       - Quickstart: quickstart.md
       - Configuration: configuration.md
       - Deployment: deployment.md
+  - Tutorials:
+      - "From Data to Discovery": tutorials/getting-started.md
+      - "Cloud Brain Skills": tutorials/cloud-brain-guide.md
+      - "Lab Memory": tutorials/memory-guide.md
+      - "Export & Reproducibility": tutorials/export-guide.md
   - User Guide:
       - Cookbook: cookbook.md
       - Plugin Development: plugin-development.md

@@ -210,12 +210,53 @@ stubs and a `pyproject.toml` entry point so LabClaw auto-loads it on startup.
 | `labclaw mcp` | Start MCP server (stdio transport) |
 | `labclaw plugin list` | List registered plugins |
 | `labclaw plugin create <name>` | Scaffold a new plugin |
+| `labclaw brain` | Start Cloud Brain skills API server |
+| `labclaw skills list` | List registered AI skills |
+| `labclaw pipeline --once` | Run one analysis cycle |
+| `labclaw reproduce` | Verify deterministic output |
+| `labclaw memory query "term"` | Search stored findings |
+| `labclaw export --format nwb` | Export findings to NWB or JSON |
 | `labclaw --api [PORT]` | Launch FastAPI server only |
 | `labclaw --dashboard` | Launch Streamlit dashboard only |
 
 ---
 
+## Start Cloud Brain
+
+Cloud Brain gives you a single API to query PubMed, UniProt, ChEMBL, and more:
+
+```bash
+labclaw brain --port 18802
+```
+
+Query scientific databases:
+
+```bash
+# List available tools
+curl http://localhost:18802/brain/tools
+
+# Search PubMed
+curl -X POST http://localhost:18802/brain/execute \
+  -H "Content-Type: application/json" \
+  -d '{"tool_name": "search_pubmed", "arguments": {"query": "CRISPR delivery 2025"}}'
+```
+
+See the [Cloud Brain Tutorial](tutorials/cloud-brain-guide.md) for detailed examples.
+
+---
+
 ## Next Steps
+
+**Tutorials** (recommended for scientists):
+
+| Tutorial | What You'll Learn |
+|----------|------------------|
+| [From Data to Discovery](tutorials/getting-started.md) | End-to-end walkthrough: CSV → patterns → hypotheses |
+| [Cloud Brain Skills](tutorials/cloud-brain-guide.md) | Query PubMed, UniProt, ChEMBL from one API |
+| [Lab Memory](tutorials/memory-guide.md) | How LabClaw remembers and gets smarter |
+| [Export & Reproducibility](tutorials/export-guide.md) | NWB export, reproducibility verification |
+
+**Reference**:
 
 | Topic | Doc |
 |-------|-----|
