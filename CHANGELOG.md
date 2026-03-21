@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.0.13 — 2026-03-21
+
+### Documentation — Scientist-Ready Release
+
+- **Getting Started Tutorial** — "From Raw Data to First Discovery" (503 lines)
+  - Step-by-step for scientists: install → demo → analyze your CSV → query results
+- **Cloud Brain Guide** — "Your Lab's AI Toolkit" (1,048 lines)
+  - PubMed, UniProt, ChEMBL, NCBI Gene, BLAST examples with curl + Python
+- **Memory Guide** — "How LabClaw Remembers Everything" (413 lines)
+  - Three-tier memory explained, querying, knowledge graph exploration
+- **Export Guide** — "Sharing and Verifying Results" (575 lines)
+  - NWB export, JSON export, reproduce command, provenance chains
+- Updated quickstart with Cloud Brain section and tutorial links
+- Updated README with Cloud Brain section, tutorial links, updated stats
+- Added Tutorials section to MkDocs navigation
+
+### Bug Fixes
+
+- Fix RuntimeWarning: skip zero-variance columns in Pearson correlation (scipy ConstantInputWarning)
+- Fix Release workflow: switch all jobs to self-hosted runners
+
+### Stats
+
+- 2,539 lines of new scientist-focused tutorials
+- 2,723 tests, 100% coverage maintained
+
 ## 0.0.12 — 2026-03-21
 
 ### Features

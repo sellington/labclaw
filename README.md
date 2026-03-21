@@ -156,12 +156,42 @@ labclaw memory query "term"      Search stored findings
 labclaw memory stats             Show memory statistics
 labclaw export --format nwb      Export findings to NWB or JSON
 labclaw reproduce                Verify deterministic output
+labclaw brain                    Start Cloud Brain skills API server
+labclaw skills list              List registered AI skills
 labclaw plugin list              List registered plugins
 labclaw plugin create <name>     Scaffold a new plugin
 labclaw mcp                      Start MCP server (Claude Desktop integration)
 labclaw --dashboard              Launch Streamlit dashboard
 labclaw --api [PORT]             Launch REST API only
 ```
+
+## Cloud Brain — Scientific AI Skills
+
+Cloud Brain gives your lab a single API to access scientific databases and AI tools:
+
+```bash
+labclaw brain --port 18802
+```
+
+| Skill | What It Does |
+|-------|-------------|
+| **LifeSci** | Search PubMed, UniProt, ChEMBL, NCBI Gene, BLAST |
+| **ToolUniverse** | Discover and run 200+ bioinformatics tools |
+| **Biomni** | Multi-modal biological data analysis |
+| **KDense** | Knowledge-dense skill reasoning |
+| **Write** | AI-assisted scientific writing |
+
+```bash
+# Search PubMed for recent CRISPR papers
+curl http://localhost:18802/brain/tools
+
+# Execute a tool
+curl -X POST http://localhost:18802/brain/execute \
+  -H "Content-Type: application/json" \
+  -d '{"tool_name": "search_pubmed", "arguments": {"query": "CRISPR delivery 2025"}}'
+```
+
+See the [Cloud Brain Tutorial](docs/tutorials/cloud-brain-guide.md) for detailed examples.
 
 ## The Daemon
 
@@ -179,22 +209,24 @@ All intervals are configurable. Run `labclaw serve --help` for options.
 ## Development
 
 ```bash
-make test       # 2000+ tests, 100% coverage required
+make test       # 2700+ tests, 100% coverage required
 make lint       # ruff check
 make format     # ruff format
 ```
 
 ## Documentation
 
-- [Architecture Overview](docs/architecture.md)
-- [Quick Start Guide](docs/quickstart.md)
-- [Configuration](docs/configuration.md)
-- [API Reference](docs/api-reference.md)
-- [Plugin Development](docs/plugin-development.md)
-- [Memory System](docs/memory-system.md)
-- [Self-Evolution](docs/self-evolution.md)
-- [Integration Stack](docs/awesome-ai-for-science.md)
-- [Deployment Guide](deploy/)
+**Tutorials** (start here):
+- [From Data to Discovery](docs/tutorials/getting-started.md) — 10-minute walkthrough
+- [Cloud Brain Skills](docs/tutorials/cloud-brain-guide.md) — PubMed, UniProt, ChEMBL
+- [Lab Memory](docs/tutorials/memory-guide.md) — How LabClaw remembers
+- [Export & Reproducibility](docs/tutorials/export-guide.md) — NWB, JSON, reproducibility
+
+**Reference**:
+- [Quick Start](docs/quickstart.md) | [Configuration](docs/configuration.md)
+- [Architecture](docs/architecture.md) | [Memory System](docs/memory-system.md)
+- [API Reference](docs/api-reference.md) | [Plugin Development](docs/plugin-development.md)
+- [Self-Evolution](docs/self-evolution.md) | [Deployment](docs/deployment.md)
 
 ## Roadmap
 

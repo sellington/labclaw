@@ -181,6 +181,10 @@ class PatternMiner:
                 if len(vals_a) < 3:
                     continue
 
+                # Skip if either column has zero variance (all identical values)
+                if max(vals_a) == min(vals_a) or max(vals_b) == min(vals_b):
+                    continue
+
                 r_val, p_val = scipy_stats.pearsonr(vals_a, vals_b)
                 r = float(r_val)
                 p = float(p_val)
