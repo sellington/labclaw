@@ -51,6 +51,8 @@ def main() -> None:
         mcp_main()
     elif cmd == "plugin":
         _plugin_cmd(sys.argv[2:])
+    elif cmd == "brain":
+        _brain_cmd(sys.argv[2:])
     elif cmd == "skills":
         _skills_cmd(sys.argv[2:])
     elif cmd == "pipeline":
@@ -72,6 +74,7 @@ def main() -> None:
         print("  init           Scaffold a new LabClaw project directory")
         print("  mcp            Start MCP server (stdio transport)")
         print("  plugin         Manage plugins (see: labclaw plugin --help)")
+        print("  brain          Launch Cloud Brain skills server")
         print("  skills         Manage cloud brain skills (see: labclaw skills --help)")
         print("  pipeline       Run one discovery cycle on CSV data and print JSON result")
         print("  ablation       Run full vs no-evolution comparison and print JSON result")
@@ -284,6 +287,30 @@ def _plugin_cmd(args: list[str]) -> None:
         print("  create <name>             Scaffold a new plugin project")
         print("    --type device|domain|analysis  Plugin type (default: domain)")
         print("    --out DIR                      Output directory (default: .)")
+
+
+def _brain_cmd(args: list[str]) -> None:
+    """Launch the Cloud Brain skills server."""
+    port = 18802
+    i = 0
+    while i < len(args):
+        if args[i] == "--port" and i + 1 < len(args):
+            port = int(args[i + 1])
+            i += 2
+        elif args[i] in ("-h", "--help"):
+            print("Usage: labclaw brain [--port PORT]")
+            print()
+            print("Options:")
+            print("  --port PORT  Server port (default: 18802)")
+            return
+        else:
+            i += 1
+
+    import uvicorn
+
+    from labclaw.skills.server import app
+
+    uvicorn.run(app, host="127.0.0.1", port=port)
 
 
 def _skills_cmd(args: list[str]) -> None:
