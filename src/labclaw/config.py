@@ -78,6 +78,14 @@ class SchedulingConfig(BaseModel):
     max_backoff: float = 60.0
 
 
+class SkillsConfig(BaseModel):
+    """Configuration for the cloud brain skills system."""
+
+    enabled: bool = True
+    auto_register_builtins: bool = True
+    enabled_skills: list[str] = []
+
+
 class LiteLLMConfig(BaseModel):
     """Configuration for the LiteLLM routing layer."""
 
@@ -119,6 +127,7 @@ class LabClawConfig(BaseModel):
     memory: MemoryConfig = MemoryConfig()
     proactive: ProactiveConfig = ProactiveConfig()
     scheduling: SchedulingConfig = SchedulingConfig()
+    skills: SkillsConfig = SkillsConfig()
     litellm: LiteLLMConfig = LiteLLMConfig()
 
     def model_post_init(self, __context: Any) -> None:

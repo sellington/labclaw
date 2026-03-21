@@ -1,28 +1,15 @@
-FROM python:3.13-slim AS builder
-
-WORKDIR /build
-
-RUN pip install --no-cache-dir build
-
-COPY pyproject.toml README.md ./
-COPY src/ src/
-
-RUN python -m build --wheel --outdir /build/wheels
-
 FROM python:3.13-slim
-
 WORKDIR /app
-
-COPY --from=builder /build/wheels/*.whl /tmp/wheels/
-RUN pip install --no-cache-dir /tmp/wheels/*.whl && rm -rf /tmp/wheels
-
-RUN useradd --create-home --shell /bin/bash labclaw
-USER labclaw
-WORKDIR /app
-
-EXPOSE 18800 18801
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import json,urllib.request; r=urllib.request.urlopen('http://localhost:18800/api/health'); d=json.load(r); raise SystemExit(0 if d.get('status')=='healthy' else 1)" || exit 1
-
-ENTRYPOINT ["labclaw", "serve", "--host", "0.0.0.0", "--dashboard-host", "0.0.0.0"]
+RUN pip install --no-cache-dir uv
+COPY pyproject.toml uv.lock README.md ./
+COPY src/ src/
+RUN uv sync --frozen --no-dev --extra skills 2>/dev/null || uv sync --frozen --no-dev
+RUN uv pip install gunicorn uvicorn --python .venv/bin/python
+ENV PATH="/app/.venv/bin:$PATH"
+ENV TOOLUNIVERSE_LAZY_LOADING=true
+EXPOSE 8000
+CMD ["gunicorn", "labclaw.skills.server:app", \
+     "-w", "2", "-k", "uvicorn.workers.UvicornWorker", \
+     "-b", "0.0.0.0:8000", "--preload", \
+     "--timeout", "120", \
+     "--max-requests", "1000", "--max-requests-jitter", "50"]
