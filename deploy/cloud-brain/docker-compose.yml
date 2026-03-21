@@ -1,0 +1,36 @@
+services:
+  brain:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LABCLAW_API_KEYS=${LABCLAW_API_KEYS:-}
+      - TOOLUNIVERSE_LAZY_LOADING=true
+    volumes:
+      - tu_cache:/root/.cache/tooluniverse
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/brain/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CF_TUNNEL_TOKEN}
+    restart: unless-stopped
+    depends_on:
+      brain:
+        condition: service_healthy
+
+volumes:
+  tu_cache:
