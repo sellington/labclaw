@@ -58,6 +58,13 @@ dev = [
     "safety>=3.0.0,<4.0.0",
     "commitizen>=3.0,<5.0",
 ]
+skills = [
+    "tooluniverse>=1.1.0; python_version>='3.11'",
+    "biomni>=0.0.1; python_version>='3.11'",
+    "claude-skills-mcp>=1.0.0; python_version>='3.12'",
+    "langchain-openai>=1.0.0; python_version>='3.11'",
+    "langchain-anthropic>=1.0.0; python_version>='3.11'",
+]
 science = [
     "scikit-learn>=1.4.0,<2.0.0",
     "scikit-optimize>=0.10.0,<1.0.0",
@@ -155,6 +162,13 @@ tag_format = "v$version"
 update_changelog_on_bump = true
 changelog_incremental = true
 changelog_file = "CHANGELOG.md"
+
+[tool.uv]
+# Skills extra has forward-looking version pins (biomni >=0.1.0 not yet on PyPI)
+# Exclude from resolution so it doesn't block development workflows
+override-dependencies = [
+    "biomni>=0.0.1",
+]
 
 [tool.mypy]
 python_version = "3.11"
