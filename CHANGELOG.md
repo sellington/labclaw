@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.0.11 — 2026-03-21
+
+### Bug Fixes
+
+- Make task claims atomic and harden Tier-A markdown appends (#73)
+- Serialize KG backend initialization with asyncio.Lock (#72)
+- Persist dedup keys for all patterns, not just rendered findings (#72)
+- Pass configured `tier_b_db_path` to KG backend factory (#72)
+- Await async SQLite KG backend methods in memory routes (#72)
+- Type `get_tier_b_backend` return as `TierBBackend` instead of `object` (#72)
+
+### CI & Infrastructure
+
+- Switch all workflows (security, docs, docker) to self-hosted runners (#84)
+- Install gitleaks to user-local path for self-hosted runner (#84)
+- Restore self-hosted runner for all CI jobs (#83)
+- Resolve lint, coverage, and type check failures (#77)
+- Enforce production gates and harden security pipeline
+
+### Tests
+
+- Resolve async teardown warnings in BDD and daemon tests (#86)
+- Mock Observer in inotify-dependent tests (#82)
+
+### Docs
+
+- Self-contained docs build and resolve mkdocs warnings (#85)
+
+### Dependencies
+
+- `docker/build-push-action` 6.19.2 → 7.0.0
+- `docker/setup-buildx-action` 3.12.0 → 4.0.0
+- `docker/metadata-action` 5.10.0 → 6.0.0
+- `actions/download-artifact` 8.0.0 → 8.0.1
+- `webfactory/ssh-agent` 0.9.1 → 0.10.0
+- `softprops/action-gh-release` 2.5.0 → 2.6.1
+
+### Refactors
+
+- Complete `_uuid` dedup migration in orchestrator steps
+- Expose `rule_metric_names` property instead of private `_rules` access
+- Remove unused `_tier_b_backend_lock` dead code
+
 ## 0.0.10 — 2026-02-25
 
 ### Features
