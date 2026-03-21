@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.0.12 — 2026-03-21
+
+### Features
+
+- **Cloud Brain** skill registry — unified API server for all scientific AI skills (#89)
+  - 5 built-in skills: ToolUniverse, Biomni, KDense, Write, LifeSci
+  - LifeSci MCP multi-provider skill (PubMed, UniProt, ChEMBL, NCBI Gene, BLAST)
+  - REST API at `/brain/*` with FastAPI (health, skills, tools, execute, inventory)
+  - API key authentication (`X-API-Key` header, configurable via env)
+  - Rate limiting via slowapi (60-120 req/min per endpoint)
+  - Request size limiting (1MB max) middleware
+  - Response truncation for oversized results (100KB)
+  - Docker deployment support (`deploy/docker-compose.cloud-brain.yml`)
+  - CLI: `labclaw brain` and `labclaw skills` commands
+
+### Bug Fixes
+
+- Fix 7 test failures in CloudBrainServer (slowapi requires Request object)
+- Fix mypy type error from variable shadowing in inventory endpoint
+- Fix 4 N805 lint violations in FakeLock test classes
+
+### Docs
+
+- Ecosystem-level design system documentation (#81)
+- Cloud Brain V2 architecture design doc
+- Cloud skills open-source tool inventory
+
+### CI
+
+- Pre-commit hooks: conventional commits + gitleaks (#88)
+
+### Stats
+
+- Source: 7,956 → 8,834 LOC (+878)
+- Tests: 2,439 → 2,723 (+284)
+- Coverage: 100%
+
 ## 0.0.11 — 2026-03-21
 
 ### Bug Fixes
