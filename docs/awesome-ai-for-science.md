@@ -6,7 +6,7 @@
 
 ## Contents
 
-- [Agent Platforms & Skills](#agent-platforms--skills)
+- [Agent Platforms & Skills](#agent-platforms-skills)
 - [MCP Servers](#mcp-servers)
 - [Neuroscience Tools](#neuroscience-tools)
 - [Data APIs](#data-apis)
