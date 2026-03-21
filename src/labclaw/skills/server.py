@@ -7,10 +7,11 @@ import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Security
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from slowapi import Limiter
@@ -172,10 +173,31 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_middleware(_RequestSizeLimitMiddleware)
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "X-API-Key"],
+)
+
 
 @app.exception_handler(RateLimitExceeded)
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
     return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
+
+
+_STATIC_DIR = Path(__file__).parent / "static"
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def serve_ui() -> HTMLResponse:
+    """Serve the Cloud Brain web UI."""
+    html_path = _STATIC_DIR / "brain.html"
+    if html_path.exists():
+        return HTMLResponse(html_path.read_text())
+    return HTMLResponse("<h1>Cloud Brain</h1><p>UI not found.</p>")
 
 
 # ---------------------------------------------------------------------------
