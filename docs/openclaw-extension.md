@@ -89,4 +89,4 @@ Any general-purpose improvements to LLM routing or skill packaging will be
 proposed upstream. Science-specific code stays in LabClaw.
 
 **When will `labclaw-skill` be available?**
-After v0.1.0. See [ROADMAP.md](../ROADMAP.md).
+After v0.1.0. See [Roadmap](roadmap.md).

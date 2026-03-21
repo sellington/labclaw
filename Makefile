@@ -35,10 +35,10 @@ coverage-html:
 	uv run pytest --cov=labclaw --cov-report=html -q
 
 docs:
-	uv run mkdocs build
+	uv run --extra docs mkdocs build
 
 docs-serve:
-	uv run mkdocs serve
+	uv run --extra docs mkdocs serve
 
 release:
 	uv run cz bump
