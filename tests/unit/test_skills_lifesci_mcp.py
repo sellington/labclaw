@@ -358,7 +358,7 @@ class TestQueryOpentargets:
         from labclaw.skills.lifesci_mcp import _query_opentargets
 
         mock_session = AsyncMock()
-        mock_session.call_tool.side_effect = TimeoutError("slow")
+        mock_session.call_tool.side_effect = ConnectionError("slow")
         with patch(
             "labclaw.skills.lifesci_mcp._ensure_session",
             new_callable=AsyncMock,

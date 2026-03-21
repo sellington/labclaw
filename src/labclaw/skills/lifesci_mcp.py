@@ -56,6 +56,7 @@ _MCP_SERVERS: dict[str, dict[str, Any]] = {
 }
 
 # Cached MCP sessions per server
+_mcp_lock = asyncio.Lock()
 _mcp_sessions: dict[str, Any] = {}
 _mcp_transports: dict[str, Any] = {}
 
@@ -75,26 +76,30 @@ async def _ensure_session(server_key: str) -> Any:
         logger.warning("Unknown MCP server key: %s", server_key)
         return None
 
-    try:
-        from mcp import ClientSession, StdioServerParameters
-        from mcp.client.stdio import stdio_client
+    async with _mcp_lock:
+        if server_key in _mcp_sessions:
+            return _mcp_sessions[server_key]
 
-        params = StdioServerParameters(
-            command=server_cfg["command"],
-            args=server_cfg["args"],
-        )
-        transport = stdio_client(params)
-        read_stream, write_stream = await transport.__aenter__()
-        session = ClientSession(read_stream, write_stream)
-        await session.initialize()
+        try:
+            from mcp import ClientSession, StdioServerParameters
+            from mcp.client.stdio import stdio_client
 
-        _mcp_sessions[server_key] = session
-        _mcp_transports[server_key] = transport
-        logger.info("Life-sci MCP server '%s' connected", server_key)
-        return session
-    except Exception as exc:
-        logger.warning("Life-sci MCP '%s' connection failed: %s", server_key, exc)
-        return None
+            params = StdioServerParameters(
+                command=server_cfg["command"],
+                args=server_cfg["args"],
+            )
+            transport = stdio_client(params)
+            read_stream, write_stream = await transport.__aenter__()
+            session = ClientSession(read_stream, write_stream)
+            await session.initialize()
+
+            _mcp_sessions[server_key] = session
+            _mcp_transports[server_key] = transport
+            logger.info("Life-sci MCP server '%s' connected", server_key)
+            return session
+        except Exception as exc:
+            logger.warning("Life-sci MCP '%s' connection failed: %s", server_key, exc)
+            return None
 
 
 # ---------------------------------------------------------------------------
@@ -115,9 +120,12 @@ async def _search_pubmed(
                 success=False,
                 error="PubMed MCP server not available. Install: uvx pubmed-mcp",
             )
-        result = await session.call_tool(
-            _MCP_SERVERS["pubmed"]["tool_name"],
-            arguments={"query": query, "max_results": max_results},
+        result = await asyncio.wait_for(
+            session.call_tool(
+                _MCP_SERVERS["pubmed"]["tool_name"],
+                arguments={"query": query, "max_results": max_results},
+            ),
+            timeout=30.0,
         )
         return ToolResult(
             success=True,
@@ -127,6 +135,9 @@ async def _search_pubmed(
                 "results": result.content if hasattr(result, "content") else str(result),
             },
         )
+    except TimeoutError:
+        logger.warning("PubMed search timed out after 30s")
+        return ToolResult(success=False, error="PubMed search timed out after 30s")
     except Exception as exc:
         logger.warning("PubMed search failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
@@ -145,9 +156,12 @@ async def _search_biorxiv(
                 success=False,
                 error="bioRxiv MCP server not available. Install: uvx biorxiv-mcp",
             )
-        result = await session.call_tool(
-            _MCP_SERVERS["biorxiv"]["tool_name"],
-            arguments={"query": query, "max_results": max_results},
+        result = await asyncio.wait_for(
+            session.call_tool(
+                _MCP_SERVERS["biorxiv"]["tool_name"],
+                arguments={"query": query, "max_results": max_results},
+            ),
+            timeout=30.0,
         )
         return ToolResult(
             success=True,
@@ -157,6 +171,9 @@ async def _search_biorxiv(
                 "results": result.content if hasattr(result, "content") else str(result),
             },
         )
+    except TimeoutError:
+        logger.warning("bioRxiv search timed out after 30s")
+        return ToolResult(success=False, error="bioRxiv search timed out after 30s")
     except Exception as exc:
         logger.warning("bioRxiv search failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
@@ -175,9 +192,12 @@ async def _query_chembl(
                 success=False,
                 error="ChEMBL MCP server not available. Install: uvx chembl-mcp",
             )
-        result = await session.call_tool(
-            _MCP_SERVERS["chembl"]["tool_name"],
-            arguments={"query": query, "query_type": query_type},
+        result = await asyncio.wait_for(
+            session.call_tool(
+                _MCP_SERVERS["chembl"]["tool_name"],
+                arguments={"query": query, "query_type": query_type},
+            ),
+            timeout=30.0,
         )
         return ToolResult(
             success=True,
@@ -188,6 +208,9 @@ async def _query_chembl(
                 "results": result.content if hasattr(result, "content") else str(result),
             },
         )
+    except TimeoutError:
+        logger.warning("ChEMBL query timed out after 30s")
+        return ToolResult(success=False, error="ChEMBL query timed out after 30s")
     except Exception as exc:
         logger.warning("ChEMBL query failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
@@ -206,9 +229,12 @@ async def _query_opentargets(
                 success=False,
                 error=("OpenTargets MCP server not available. Install: uvx opentargets-mcp"),
             )
-        result = await session.call_tool(
-            _MCP_SERVERS["opentargets"]["tool_name"],
-            arguments={"query": query, "query_type": query_type},
+        result = await asyncio.wait_for(
+            session.call_tool(
+                _MCP_SERVERS["opentargets"]["tool_name"],
+                arguments={"query": query, "query_type": query_type},
+            ),
+            timeout=30.0,
         )
         return ToolResult(
             success=True,
@@ -219,6 +245,9 @@ async def _query_opentargets(
                 "results": result.content if hasattr(result, "content") else str(result),
             },
         )
+    except TimeoutError:
+        logger.warning("OpenTargets query timed out after 30s")
+        return ToolResult(success=False, error="OpenTargets query timed out after 30s")
     except Exception as exc:
         logger.warning("OpenTargets query failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
@@ -240,13 +269,16 @@ async def _search_clinical_trials(
                     "ClinicalTrials.gov MCP server not available. Install: uvx clinicaltrials-mcp"
                 ),
             )
-        result = await session.call_tool(
-            _MCP_SERVERS["clinical_trials"]["tool_name"],
-            arguments={
-                "query": query,
-                "max_results": max_results,
-                "status": status,
-            },
+        result = await asyncio.wait_for(
+            session.call_tool(
+                _MCP_SERVERS["clinical_trials"]["tool_name"],
+                arguments={
+                    "query": query,
+                    "max_results": max_results,
+                    "status": status,
+                },
+            ),
+            timeout=30.0,
         )
         return ToolResult(
             success=True,
@@ -256,6 +288,12 @@ async def _search_clinical_trials(
                 "status": status,
                 "results": result.content if hasattr(result, "content") else str(result),
             },
+        )
+    except TimeoutError:
+        logger.warning("ClinicalTrials search timed out after 30s")
+        return ToolResult(
+            success=False,
+            error="ClinicalTrials search timed out after 30s",
         )
     except Exception as exc:
         logger.warning("ClinicalTrials search failed: %s", exc)
@@ -373,7 +411,10 @@ class LifeSciMCPSkill:
         """Check if at least one life science MCP server is reachable."""
         for key in _MCP_SERVERS:
             try:
-                session = await _ensure_session(key)
+                session = await asyncio.wait_for(
+                    _ensure_session(key),
+                    timeout=5.0,
+                )
                 if session is not None:
                     return True
             except Exception:
@@ -383,13 +424,6 @@ class LifeSciMCPSkill:
     def configure(self, **kwargs: Any) -> None:
         """Reset MCP connections."""
         if kwargs.get("reset"):
-            for key in list(_mcp_transports):
-                try:
-                    asyncio.get_event_loop().run_until_complete(
-                        _mcp_transports[key].__aexit__(None, None, None)
-                    )
-                except Exception:
-                    pass
             _mcp_sessions.clear()
             _mcp_transports.clear()
 

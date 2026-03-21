@@ -9,7 +9,9 @@ Maps to: EXPERIMENT step (instrument/tool selection) and ANALYZE step.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import threading
 from typing import Any
 
 from labclaw.agents.tools import AgentTool, ToolResult
@@ -18,22 +20,26 @@ from labclaw.skills.base import CloudSkill, SkillCapability, SkillMetadata
 logger = logging.getLogger(__name__)
 
 # Lazy-loaded singleton to avoid slow startup
+_tu_lock = threading.Lock()
 _tu_instance: Any = None
 
 
 def _get_tu() -> Any:
     """Get or create the ToolUniverse singleton."""
     global _tu_instance  # noqa: PLW0603
-    if _tu_instance is None:
-        from tooluniverse import ToolUniverse
+    if _tu_instance is not None:
+        return _tu_instance
+    with _tu_lock:
+        if _tu_instance is None:
+            from tooluniverse import ToolUniverse
 
-        _tu_instance = ToolUniverse()
-        _tu_instance.load_tools()
-        logger.info(
-            "ToolUniverse initialized with %d tools",
-            len(_tu_instance.return_all_loaded_tools()),
-        )
-    return _tu_instance
+            _tu_instance = ToolUniverse()
+            _tu_instance.load_tools()
+            logger.info(
+                "ToolUniverse initialized with %d tools",
+                len(_tu_instance.return_all_loaded_tools()),
+            )
+        return _tu_instance
 
 
 def _sync_run(tu: Any, payload: dict[str, Any]) -> Any:
@@ -48,12 +54,13 @@ async def _run_tool(
 ) -> ToolResult:
     """Execute a ToolUniverse tool by name with arguments."""
     try:
-        import asyncio
-
         tu = _get_tu()
         payload = {"name": name, "arguments": arguments or {}}
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(None, _sync_run, tu, payload)
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, _sync_run, tu, payload),
+            timeout=30.0,
+        )
 
         if isinstance(result, dict) and result.get("status") == "error":
             return ToolResult(
@@ -62,9 +69,44 @@ async def _run_tool(
             )
 
         return ToolResult(success=True, data=result)
+    except TimeoutError:
+        logger.warning("ToolUniverse run(%s) timed out after 30s", name)
+        return ToolResult(success=False, error=f"Tool {name} timed out after 30s")
     except Exception as exc:
         logger.warning("ToolUniverse run(%s) failed: %s", name, exc)
         return ToolResult(success=False, error=str(exc))
+
+
+def _sync_find_tools(tu: Any, description: str, limit: int) -> ToolResult:
+    """Run tool-finding logic synchronously in a thread."""
+    result = tu.run(
+        {
+            "name": "Tool_Finder",
+            "arguments": {
+                "description": description,
+                "limit": limit,
+            },
+        }
+    )
+
+    if isinstance(result, dict) and result.get("status") == "error":
+        matches = tu.find_tools_by_pattern(description)
+        return ToolResult(
+            success=True,
+            data={
+                "tools": [
+                    {
+                        "name": t.get("name", ""),
+                        "description": str(t.get("description", ""))[:200],
+                        "category": t.get("category", ""),
+                    }
+                    for t in (matches[:limit] if matches else [])
+                ],
+                "source": "pattern_search",
+            },
+        )
+
+    return ToolResult(success=True, data=result)
 
 
 async def _find_tools(
@@ -75,37 +117,14 @@ async def _find_tools(
     """Find relevant tools by natural language description."""
     try:
         tu = _get_tu()
-
-        # Use Tool_Finder (basic keyword search, no embedding needed)
-        result = tu.run(
-            {
-                "name": "Tool_Finder",
-                "arguments": {
-                    "description": description,
-                    "limit": limit,
-                },
-            }
+        loop = asyncio.get_running_loop()
+        return await asyncio.wait_for(
+            loop.run_in_executor(None, _sync_find_tools, tu, description, limit),
+            timeout=30.0,
         )
-
-        if isinstance(result, dict) and result.get("status") == "error":
-            # Fallback: pattern-based search
-            matches = tu.find_tools_by_pattern(description)
-            return ToolResult(
-                success=True,
-                data={
-                    "tools": [
-                        {
-                            "name": t.get("name", ""),
-                            "description": str(t.get("description", ""))[:200],
-                            "category": t.get("category", ""),
-                        }
-                        for t in (matches[:limit] if matches else [])
-                    ],
-                    "source": "pattern_search",
-                },
-            )
-
-        return ToolResult(success=True, data=result)
+    except TimeoutError:
+        logger.warning("ToolUniverse find_tools timed out after 30s")
+        return ToolResult(success=False, error="find_tools timed out after 30s")
     except Exception as exc:
         logger.warning("ToolUniverse find_tools failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
@@ -117,8 +136,15 @@ async def _get_tool_spec(
     """Get the OpenAI-format specification for a tool."""
     try:
         tu = _get_tu()
-        spec = tu.tool_specification(tool_name, format="openai")
+        loop = asyncio.get_running_loop()
+        spec = await asyncio.wait_for(
+            loop.run_in_executor(None, lambda: tu.tool_specification(tool_name, format="openai")),
+            timeout=30.0,
+        )
         return ToolResult(success=True, data=spec)
+    except TimeoutError:
+        logger.warning("ToolUniverse spec(%s) timed out after 30s", tool_name)
+        return ToolResult(success=False, error=f"get_tool_spec({tool_name}) timed out after 30s")
     except Exception as exc:
         logger.warning("ToolUniverse spec(%s) failed: %s", tool_name, exc)
         return ToolResult(success=False, error=str(exc))
@@ -128,7 +154,11 @@ async def _list_categories() -> ToolResult:
     """List all available tool categories."""
     try:
         tu = _get_tu()
-        types = tu.get_tool_types()
+        loop = asyncio.get_running_loop()
+        types = await asyncio.wait_for(
+            loop.run_in_executor(None, tu.get_tool_types),
+            timeout=30.0,
+        )
         return ToolResult(
             success=True,
             data={
@@ -136,6 +166,9 @@ async def _list_categories() -> ToolResult:
                 "total": len(types),
             },
         )
+    except TimeoutError:
+        logger.warning("ToolUniverse list_categories timed out after 30s")
+        return ToolResult(success=False, error="list_categories timed out after 30s")
     except Exception as exc:
         logger.warning("ToolUniverse list_categories failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
@@ -225,7 +258,11 @@ class ToolUniverseSkill:
     async def health_check(self) -> bool:
         """Check if ToolUniverse SDK loads successfully."""
         try:
-            tu = _get_tu()
+            loop = asyncio.get_running_loop()
+            tu = await asyncio.wait_for(
+                loop.run_in_executor(None, _get_tu),
+                timeout=5.0,
+            )
             tools = tu.return_all_loaded_tools()
             return len(tools) > 0
         except Exception:

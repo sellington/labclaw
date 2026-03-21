@@ -24,6 +24,7 @@ from labclaw.skills.base import CloudSkill, SkillCapability, SkillMetadata
 logger = logging.getLogger(__name__)
 
 # Cached MCP session
+_mcp_lock = asyncio.Lock()
 _mcp_session: Any = None
 _mcp_transport: Any = None
 
@@ -34,26 +35,30 @@ async def _ensure_mcp_session() -> Any:
     if _mcp_session is not None:
         return _mcp_session
 
-    try:
-        from mcp import ClientSession, StdioServerParameters
-        from mcp.client.stdio import stdio_client
+    async with _mcp_lock:
+        if _mcp_session is not None:
+            return _mcp_session
 
-        server_params = StdioServerParameters(
-            command="uvx",
-            args=["claude-skills-mcp"],
-        )
-        transport = stdio_client(server_params)
-        read_stream, write_stream = await transport.__aenter__()
-        session = ClientSession(read_stream, write_stream)
-        await session.initialize()
+        try:
+            from mcp import ClientSession, StdioServerParameters
+            from mcp.client.stdio import stdio_client
 
-        _mcp_session = session
-        _mcp_transport = transport
-        logger.info("K-Dense MCP server connected")
-        return session
-    except Exception as exc:
-        logger.warning("K-Dense MCP connection failed: %s", exc)
-        return None
+            server_params = StdioServerParameters(
+                command="uvx",
+                args=["claude-skills-mcp"],
+            )
+            transport = stdio_client(server_params)
+            read_stream, write_stream = await transport.__aenter__()
+            session = ClientSession(read_stream, write_stream)
+            await session.initialize()
+
+            _mcp_session = session
+            _mcp_transport = transport
+            logger.info("K-Dense MCP server connected")
+            return session
+        except Exception as exc:
+            logger.warning("K-Dense MCP connection failed: %s", exc)
+            return None
 
 
 async def _find_skills(
@@ -70,9 +75,12 @@ async def _find_skills(
                 error="K-Dense MCP server not available. Install: pip install claude-skills-mcp",
             )
 
-        result = await session.call_tool(
-            "find_helpful_skills",
-            arguments={"description": description, "limit": limit},
+        result = await asyncio.wait_for(
+            session.call_tool(
+                "find_helpful_skills",
+                arguments={"description": description, "limit": limit},
+            ),
+            timeout=30.0,
         )
         return ToolResult(
             success=True,
@@ -81,6 +89,9 @@ async def _find_skills(
                 "query": description,
             },
         )
+    except TimeoutError:
+        logger.warning("K-Dense find_skills timed out after 30s")
+        return ToolResult(success=False, error="K-Dense find_skills timed out after 30s")
     except Exception as exc:
         logger.warning("K-Dense find_skills failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
@@ -98,9 +109,12 @@ async def _read_skill(
                 error="K-Dense MCP server not available",
             )
 
-        result = await session.call_tool(
-            "read_skill_document",
-            arguments={"skill_name": skill_name},
+        result = await asyncio.wait_for(
+            session.call_tool(
+                "read_skill_document",
+                arguments={"skill_name": skill_name},
+            ),
+            timeout=30.0,
         )
         return ToolResult(
             success=True,
@@ -109,6 +123,9 @@ async def _read_skill(
                 "content": result.content if hasattr(result, "content") else str(result),
             },
         )
+    except TimeoutError:
+        logger.warning("K-Dense read_skill timed out after 30s")
+        return ToolResult(success=False, error="K-Dense read_skill timed out after 30s")
     except Exception as exc:
         logger.warning("K-Dense read_skill failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
@@ -124,13 +141,19 @@ async def _list_all_skills() -> ToolResult:
                 error="K-Dense MCP server not available",
             )
 
-        result = await session.call_tool("list_skills", arguments={})
+        result = await asyncio.wait_for(
+            session.call_tool("list_skills", arguments={}),
+            timeout=30.0,
+        )
         return ToolResult(
             success=True,
             data={
                 "skills": result.content if hasattr(result, "content") else str(result),
             },
         )
+    except TimeoutError:
+        logger.warning("K-Dense list_skills timed out after 30s")
+        return ToolResult(success=False, error="K-Dense list_skills timed out after 30s")
     except Exception as exc:
         logger.warning("K-Dense list_skills failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
@@ -201,7 +224,10 @@ class KDenseSkill:
     async def health_check(self) -> bool:
         """Check if K-Dense MCP server can be started."""
         try:
-            session = await _ensure_mcp_session()
+            session = await asyncio.wait_for(
+                _ensure_mcp_session(),
+                timeout=5.0,
+            )
             return session is not None
         except Exception:
             return False
@@ -210,13 +236,6 @@ class KDenseSkill:
         """Reset MCP session."""
         global _mcp_session, _mcp_transport  # noqa: PLW0603
         if kwargs.get("reset"):
-            if _mcp_transport is not None:
-                try:
-                    asyncio.get_event_loop().run_until_complete(
-                        _mcp_transport.__aexit__(None, None, None)
-                    )
-                except Exception:
-                    pass
             _mcp_session = None
             _mcp_transport = None
 

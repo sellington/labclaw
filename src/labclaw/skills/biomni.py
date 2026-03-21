@@ -9,7 +9,10 @@ Maps to: ANALYZE step (biomedical data interpretation) and GENERAL_REASONING.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import threading
+from pathlib import Path
 from typing import Any
 
 from labclaw.agents.tools import AgentTool, ToolResult
@@ -18,7 +21,10 @@ from labclaw.skills.base import CloudSkill, SkillCapability, SkillMetadata
 logger = logging.getLogger(__name__)
 
 # Lazy-loaded singleton
+_biomni_lock = threading.Lock()
 _biomni_agent: Any = None
+
+_BLOCKED_PATHS = ["/etc", "/proc", "/sys", "/dev", "/root", "/home"]
 
 
 def _get_agent(
@@ -27,12 +33,15 @@ def _get_agent(
 ) -> Any:
     """Get or create the Biomni A1 agent singleton."""
     global _biomni_agent  # noqa: PLW0603
-    if _biomni_agent is None:
-        from biomni.agent import A1
+    if _biomni_agent is not None:
+        return _biomni_agent
+    with _biomni_lock:
+        if _biomni_agent is None:
+            from biomni.agent import A1
 
-        _biomni_agent = A1(path=data_path, llm=llm)
-        logger.info("Biomni A1 agent initialized with LLM=%s", llm)
-    return _biomni_agent
+            _biomni_agent = A1(path=data_path, llm=llm)
+            logger.info("Biomni A1 agent initialized with LLM=%s", llm)
+        return _biomni_agent
 
 
 async def _biomni_go(
@@ -44,7 +53,11 @@ async def _biomni_go(
     """Run a biomedical query through Biomni's autonomous agent."""
     try:
         agent = _get_agent(llm=llm, data_path=data_path)
-        result = agent.go(query)
+        loop = asyncio.get_running_loop()
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, agent.go, query),
+            timeout=120.0,
+        )
 
         return ToolResult(
             success=True,
@@ -54,6 +67,9 @@ async def _biomni_go(
                 "llm": llm,
             },
         )
+    except TimeoutError:
+        logger.warning("Biomni go() timed out after 120s")
+        return ToolResult(success=False, error="Biomni go() timed out after 120s")
     except Exception as exc:
         logger.warning("Biomni go() failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
@@ -63,11 +79,18 @@ async def _biomni_list_tools() -> ToolResult:
     """List all custom tools registered in Biomni."""
     try:
         agent = _get_agent()
-        custom_tools = agent.list_custom_tools()
+        loop = asyncio.get_running_loop()
+        custom_tools = await asyncio.wait_for(
+            loop.run_in_executor(None, agent.list_custom_tools),
+            timeout=30.0,
+        )
         return ToolResult(
             success=True,
             data={"tools": custom_tools},
         )
+    except TimeoutError:
+        logger.warning("Biomni list_tools timed out after 30s")
+        return ToolResult(success=False, error="Biomni list_tools timed out after 30s")
     except Exception as exc:
         logger.warning("Biomni list_tools failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
@@ -81,12 +104,29 @@ async def _biomni_add_data(
 ) -> ToolResult:
     """Add custom data to Biomni's data lake."""
     try:
+        if path:
+            path_obj = Path(path).resolve()
+            if any(str(path_obj).startswith(b) for b in _BLOCKED_PATHS):
+                return ToolResult(
+                    success=False,
+                    error=f"Path {path} is blocked for security",
+                )
         agent = _get_agent()
-        agent.add_data(name=name, path=path, description=description)
+        loop = asyncio.get_running_loop()
+        await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                lambda: agent.add_data(name=name, path=path, description=description),
+            ),
+            timeout=30.0,
+        )
         return ToolResult(
             success=True,
             data={"added": name, "path": path},
         )
+    except TimeoutError:
+        logger.warning("Biomni add_data timed out after 30s")
+        return ToolResult(success=False, error="Biomni add_data timed out after 30s")
     except Exception as exc:
         logger.warning("Biomni add_data failed: %s", exc)
         return ToolResult(success=False, error=str(exc))
