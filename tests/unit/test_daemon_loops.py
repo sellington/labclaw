@@ -73,11 +73,17 @@ class TestRunDiscovery:
         mock_loop = MagicMock()
         mock_loop_cls = MagicMock(return_value=mock_loop)
 
+        def _fake_asyncio_run(coro: object) -> SimpleNamespace:
+            """Close the coroutine to avoid 'was never awaited' warning."""
+            if hasattr(coro, "close"):
+                coro.close()  # type: ignore[union-attr]
+            return mock_result
+
         # asyncio.run is called inside _run_discovery; return the mock result directly
         with (
             patch("labclaw.api.deps.get_llm_provider", return_value=MagicMock()),
             patch("labclaw.orchestrator.loop.ScientificLoop", mock_loop_cls),
-            patch("asyncio.run", return_value=mock_result),
+            patch("asyncio.run", side_effect=_fake_asyncio_run),
         ):
             daemon._run_discovery()
 
