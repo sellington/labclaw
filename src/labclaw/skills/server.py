@@ -267,12 +267,12 @@ async def inventory(request: Request) -> InventoryResponse:
             tools_per_skill[s_meta.name] = 0
 
     categories: list[InventoryCategory] = []
-    for cap in sorted(cap_map):
-        skill_names = cap_map[cap]
+    for cap_name in sorted(cap_map):
+        skill_names = cap_map[cap_name]
         tool_count = sum(tools_per_skill.get(n, 0) for n in skill_names)
         categories.append(
             InventoryCategory(
-                capability=cap,
+                capability=cap_name,
                 skill_count=len(skill_names),
                 tool_count=tool_count,
                 skills=sorted(skill_names),

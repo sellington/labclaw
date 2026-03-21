@@ -422,6 +422,128 @@ class TestSearchClinicalTrials:
 
 
 # ---------------------------------------------------------------------------
+# Test: Timeout paths (TimeoutError on asyncio.wait_for)
+# ---------------------------------------------------------------------------
+
+
+class TestTimeoutPaths:
+    @pytest.mark.asyncio
+    async def test_ensure_session_double_check_lock(self) -> None:
+        """Cover line 81: session set between first check and lock acquisition."""
+        import labclaw.skills.lifesci_mcp as mod
+
+        sentinel = AsyncMock()
+
+        original_lock = mod._mcp_lock
+
+        class FakeLock:
+            async def __aenter__(self):
+                # Simulate another coroutine populating the cache before lock acquired
+                mod._mcp_sessions["pubmed"] = sentinel
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+        mod._mcp_lock = FakeLock()
+        try:
+            result = await mod._ensure_session("pubmed")
+            assert result is sentinel
+        finally:
+            mod._mcp_lock = original_lock
+
+    @pytest.mark.asyncio
+    async def test_search_pubmed_timeout(self) -> None:
+        from labclaw.skills.lifesci_mcp import _search_pubmed
+
+        mock_session = _make_mock_session()
+        with patch(
+            "labclaw.skills.lifesci_mcp._ensure_session",
+            new_callable=AsyncMock,
+            return_value=mock_session,
+        ):
+            with patch(
+                "labclaw.skills.lifesci_mcp.asyncio.wait_for",
+                side_effect=TimeoutError,
+            ):
+                result = await _search_pubmed("CRISPR")
+        assert result.success is False
+        assert "timed out" in result.error
+
+    @pytest.mark.asyncio
+    async def test_search_biorxiv_timeout(self) -> None:
+        from labclaw.skills.lifesci_mcp import _search_biorxiv
+
+        mock_session = _make_mock_session()
+        with patch(
+            "labclaw.skills.lifesci_mcp._ensure_session",
+            new_callable=AsyncMock,
+            return_value=mock_session,
+        ):
+            with patch(
+                "labclaw.skills.lifesci_mcp.asyncio.wait_for",
+                side_effect=TimeoutError,
+            ):
+                result = await _search_biorxiv("protein")
+        assert result.success is False
+        assert "timed out" in result.error
+
+    @pytest.mark.asyncio
+    async def test_query_chembl_timeout(self) -> None:
+        from labclaw.skills.lifesci_mcp import _query_chembl
+
+        mock_session = _make_mock_session()
+        with patch(
+            "labclaw.skills.lifesci_mcp._ensure_session",
+            new_callable=AsyncMock,
+            return_value=mock_session,
+        ):
+            with patch(
+                "labclaw.skills.lifesci_mcp.asyncio.wait_for",
+                side_effect=TimeoutError,
+            ):
+                result = await _query_chembl("aspirin")
+        assert result.success is False
+        assert "timed out" in result.error
+
+    @pytest.mark.asyncio
+    async def test_query_opentargets_timeout(self) -> None:
+        from labclaw.skills.lifesci_mcp import _query_opentargets
+
+        mock_session = _make_mock_session()
+        with patch(
+            "labclaw.skills.lifesci_mcp._ensure_session",
+            new_callable=AsyncMock,
+            return_value=mock_session,
+        ):
+            with patch(
+                "labclaw.skills.lifesci_mcp.asyncio.wait_for",
+                side_effect=TimeoutError,
+            ):
+                result = await _query_opentargets("BRCA1")
+        assert result.success is False
+        assert "timed out" in result.error
+
+    @pytest.mark.asyncio
+    async def test_search_clinical_trials_timeout(self) -> None:
+        from labclaw.skills.lifesci_mcp import _search_clinical_trials
+
+        mock_session = _make_mock_session()
+        with patch(
+            "labclaw.skills.lifesci_mcp._ensure_session",
+            new_callable=AsyncMock,
+            return_value=mock_session,
+        ):
+            with patch(
+                "labclaw.skills.lifesci_mcp.asyncio.wait_for",
+                side_effect=TimeoutError,
+            ):
+                result = await _search_clinical_trials("cancer")
+        assert result.success is False
+        assert "timed out" in result.error
+
+
+# ---------------------------------------------------------------------------
 # Test: health_check
 # ---------------------------------------------------------------------------
 

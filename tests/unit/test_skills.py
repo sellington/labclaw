@@ -564,6 +564,58 @@ class TestToolUniverseSkill:
         assert result.success is False
         assert result.error == "Unknown error"
 
+    @pytest.mark.asyncio
+    async def test_run_tool_timeout(self) -> None:
+        import labclaw.skills.tooluniverse as tu_mod
+        from labclaw.skills.tooluniverse import _run_tool
+
+        mock_tu = MagicMock()
+        tu_mod._tu_instance = mock_tu
+
+        with patch("labclaw.skills.tooluniverse.asyncio.wait_for", side_effect=TimeoutError):
+            result = await _run_tool("slow_tool")
+        assert result.success is False
+        assert "timed out" in result.error
+
+    @pytest.mark.asyncio
+    async def test_find_tools_timeout(self) -> None:
+        import labclaw.skills.tooluniverse as tu_mod
+        from labclaw.skills.tooluniverse import _find_tools
+
+        mock_tu = MagicMock()
+        tu_mod._tu_instance = mock_tu
+
+        with patch("labclaw.skills.tooluniverse.asyncio.wait_for", side_effect=TimeoutError):
+            result = await _find_tools("protein")
+        assert result.success is False
+        assert "timed out" in result.error
+
+    @pytest.mark.asyncio
+    async def test_get_tool_spec_timeout(self) -> None:
+        import labclaw.skills.tooluniverse as tu_mod
+        from labclaw.skills.tooluniverse import _get_tool_spec
+
+        mock_tu = MagicMock()
+        tu_mod._tu_instance = mock_tu
+
+        with patch("labclaw.skills.tooluniverse.asyncio.wait_for", side_effect=TimeoutError):
+            result = await _get_tool_spec("slow_tool")
+        assert result.success is False
+        assert "timed out" in result.error
+
+    @pytest.mark.asyncio
+    async def test_list_categories_timeout(self) -> None:
+        import labclaw.skills.tooluniverse as tu_mod
+        from labclaw.skills.tooluniverse import _list_categories
+
+        mock_tu = MagicMock()
+        tu_mod._tu_instance = mock_tu
+
+        with patch("labclaw.skills.tooluniverse.asyncio.wait_for", side_effect=TimeoutError):
+            result = await _list_categories()
+        assert result.success is False
+        assert "timed out" in result.error
+
 
 # ---------------------------------------------------------------------------
 # Test: BiomniSkill (real SDK integration)
@@ -777,6 +829,57 @@ class TestBiomniSkill:
         result = await _biomni_go("long query")
         assert result.success is True
         assert len(result.data["result"]) <= 5000
+
+    @pytest.mark.asyncio
+    async def test_biomni_go_timeout(self) -> None:
+        import labclaw.skills.biomni as bio_mod
+        from labclaw.skills.biomni import _biomni_go
+
+        mock_agent = MagicMock()
+        bio_mod._biomni_agent = mock_agent
+
+        with patch("labclaw.skills.biomni.asyncio.wait_for", side_effect=TimeoutError):
+            result = await _biomni_go("slow query")
+        assert result.success is False
+        assert "timed out" in result.error
+
+    @pytest.mark.asyncio
+    async def test_biomni_list_tools_timeout(self) -> None:
+        import labclaw.skills.biomni as bio_mod
+        from labclaw.skills.biomni import _biomni_list_tools
+
+        mock_agent = MagicMock()
+        bio_mod._biomni_agent = mock_agent
+
+        with patch("labclaw.skills.biomni.asyncio.wait_for", side_effect=TimeoutError):
+            result = await _biomni_list_tools()
+        assert result.success is False
+        assert "timed out" in result.error
+
+    @pytest.mark.asyncio
+    async def test_biomni_add_data_blocked_path(self) -> None:
+        import labclaw.skills.biomni as bio_mod
+        from labclaw.skills.biomni import _biomni_add_data
+
+        mock_agent = MagicMock()
+        bio_mod._biomni_agent = mock_agent
+
+        result = await _biomni_add_data("secret", path="/etc/passwd")
+        assert result.success is False
+        assert "blocked" in result.error
+
+    @pytest.mark.asyncio
+    async def test_biomni_add_data_timeout(self) -> None:
+        import labclaw.skills.biomni as bio_mod
+        from labclaw.skills.biomni import _biomni_add_data
+
+        mock_agent = MagicMock()
+        bio_mod._biomni_agent = mock_agent
+
+        with patch("labclaw.skills.biomni.asyncio.wait_for", side_effect=TimeoutError):
+            result = await _biomni_add_data("data", path="/tmp/safe.csv")
+        assert result.success is False
+        assert "timed out" in result.error
 
 
 # ---------------------------------------------------------------------------
@@ -1143,6 +1246,71 @@ class TestKDenseSkill:
         # Should still clear session/transport despite exception
         assert kd_mod._mcp_session is None
         assert kd_mod._mcp_transport is None
+
+    @pytest.mark.asyncio
+    async def test_ensure_mcp_session_double_check_lock(self) -> None:
+        """Cover line 40: session set between first check and lock acquisition."""
+        import labclaw.skills.kdense as kd_mod
+
+        sentinel = AsyncMock()
+        kd_mod._mcp_session = None
+
+        original_lock = kd_mod._mcp_lock
+
+        class FakeLock:
+            async def __aenter__(self):
+                # Simulate another coroutine setting the session before we acquire
+                kd_mod._mcp_session = sentinel
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+        kd_mod._mcp_lock = FakeLock()
+        try:
+            result = await kd_mod._ensure_mcp_session()
+            assert result is sentinel
+        finally:
+            kd_mod._mcp_lock = original_lock
+
+    @pytest.mark.asyncio
+    async def test_find_skills_timeout(self) -> None:
+        import labclaw.skills.kdense as kd_mod
+        from labclaw.skills.kdense import _find_skills
+
+        mock_session = AsyncMock()
+        kd_mod._mcp_session = mock_session
+
+        with patch("labclaw.skills.kdense.asyncio.wait_for", side_effect=TimeoutError):
+            result = await _find_skills("bioinformatics")
+        assert result.success is False
+        assert "timed out" in result.error
+
+    @pytest.mark.asyncio
+    async def test_read_skill_timeout(self) -> None:
+        import labclaw.skills.kdense as kd_mod
+        from labclaw.skills.kdense import _read_skill
+
+        mock_session = AsyncMock()
+        kd_mod._mcp_session = mock_session
+
+        with patch("labclaw.skills.kdense.asyncio.wait_for", side_effect=TimeoutError):
+            result = await _read_skill("pcr_protocol")
+        assert result.success is False
+        assert "timed out" in result.error
+
+    @pytest.mark.asyncio
+    async def test_list_all_skills_timeout(self) -> None:
+        import labclaw.skills.kdense as kd_mod
+        from labclaw.skills.kdense import _list_all_skills
+
+        mock_session = AsyncMock()
+        kd_mod._mcp_session = mock_session
+
+        with patch("labclaw.skills.kdense.asyncio.wait_for", side_effect=TimeoutError):
+            result = await _list_all_skills()
+        assert result.success is False
+        assert "timed out" in result.error
 
 
 # ---------------------------------------------------------------------------
@@ -2203,99 +2371,137 @@ class TestCloudBrainServer:
 
     @pytest.mark.asyncio
     async def test_list_skills_endpoint(self) -> None:
-        from labclaw.skills.server import _register_builtin_skills, _registry, list_skills
+        import httpx
+
+        from labclaw.skills.server import _register_builtin_skills, _registry, app
 
         for name in list(_registry._skills):
             _registry.unregister(name)
         _register_builtin_skills()
 
-        result = await list_skills()
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/brain/skills")
+        assert resp.status_code == 200
+        result = resp.json()
         assert len(result) == 5
 
     @pytest.mark.asyncio
     async def test_list_tools_endpoint(self) -> None:
-        from labclaw.skills.server import _register_builtin_skills, _registry, list_tools
+        import httpx
+
+        from labclaw.skills.server import _register_builtin_skills, _registry, app
 
         for name in list(_registry._skills):
             _registry.unregister(name)
         _register_builtin_skills()
 
-        result = await list_tools()
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/brain/tools")
+        assert resp.status_code == 200
+        result = resp.json()
         assert len(result) > 0
-        assert all(hasattr(t, "name") for t in result)
+        assert all("name" in t for t in result)
 
     @pytest.mark.asyncio
     async def test_health_check_endpoint(self) -> None:
-        from labclaw.skills.server import _registry, health_check
+        import httpx
+
+        from labclaw.skills.server import _registry, app
 
         for name in list(_registry._skills):
             _registry.unregister(name)
 
         _registry.register(StubSkill())
-        result = await health_check()
+
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/brain/health")
+        assert resp.status_code == 200
+        result = resp.json()
         assert isinstance(result, dict)
         assert result["stub"] is True
 
     @pytest.mark.asyncio
     async def test_execute_tool_not_found(self) -> None:
-        from labclaw.skills.server import (
-            ExecuteRequest,
-            _registry,
-            execute_tool,
-        )
+        import httpx
+
+        from labclaw.skills.server import _registry, app
 
         for name in list(_registry._skills):
             _registry.unregister(name)
 
         _registry.register(StubSkill())
-        req = ExecuteRequest(tool_name="nonexistent_tool")
-        result = await execute_tool(req)
-        assert result.success is False
-        assert "not found" in result.error
+
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/brain/execute",
+                json={"tool_name": "nonexistent_tool", "arguments": {}},
+            )
+        assert resp.status_code == 200
+        result = resp.json()
+        assert result["success"] is False
+        assert "not found" in result["error"]
 
     @pytest.mark.asyncio
     async def test_execute_tool_success(self) -> None:
-        from labclaw.skills.server import (
-            ExecuteRequest,
-            _registry,
-            execute_tool,
-        )
+        import httpx
+
+        from labclaw.skills.server import _registry, app
 
         for name in list(_registry._skills):
             _registry.unregister(name)
 
         _registry.register(StubSkill())
-        req = ExecuteRequest(tool_name="stub_tool", arguments={"x": 1})
-        result = await execute_tool(req)
-        assert result.success is True
+
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/brain/execute",
+                json={"tool_name": "stub_tool", "arguments": {"x": 1}},
+            )
+        assert resp.status_code == 200
+        result = resp.json()
+        assert result["success"] is True
 
     @pytest.mark.asyncio
     async def test_inventory_endpoint(self) -> None:
-        from labclaw.skills.server import (
-            _register_builtin_skills,
-            _registry,
-            inventory,
-        )
+        import httpx
+
+        from labclaw.skills.server import _register_builtin_skills, _registry, app
 
         for name in list(_registry._skills):
             _registry.unregister(name)
         _register_builtin_skills()
 
-        result = await inventory()
-        assert result.total_skills == 5
-        assert result.total_tools > 0
-        assert len(result.categories) > 0
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/brain/inventory")
+        assert resp.status_code == 200
+        result = resp.json()
+        assert result["total_skills"] == 5
+        assert result["total_tools"] > 0
+        assert len(result["categories"]) > 0
 
     @pytest.mark.asyncio
     async def test_inventory_with_failing_get_tools(self) -> None:
-        from labclaw.skills.server import _registry, inventory
+        import httpx
+
+        from labclaw.skills.server import _registry, app
 
         for name in list(_registry._skills):
             _registry.unregister(name)
 
         _registry.register(FailingSkill())
-        result = await inventory()
-        assert result.total_skills == 1
+
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/brain/inventory")
+        assert resp.status_code == 200
+        result = resp.json()
+        assert result["total_skills"] == 1
 
     @pytest.mark.asyncio
     async def test_lifespan(self) -> None:

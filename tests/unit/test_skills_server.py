@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -755,3 +755,40 @@ class TestRateLimiting:
         response = await _rate_limit_handler(request, exc)
         assert response.status_code == 429
         assert b"Rate limit exceeded" in response.body
+
+
+# ---------------------------------------------------------------------------
+# CLI coverage: skills command dispatch + edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestCLICoverage:
+    def test_main_dispatches_skills_cmd(self) -> None:
+        """Cover line 57: main() -> _skills_cmd dispatch."""
+        from labclaw.cli import main
+
+        with (
+            patch("sys.argv", ["labclaw", "skills"]),
+            patch("builtins.print"),
+        ):
+            main()
+
+    def test_brain_cmd_unknown_arg(self) -> None:
+        """Cover line 307: unknown arg skipped in _brain_cmd."""
+        from labclaw.cli import _brain_cmd
+
+        with patch("uvicorn.run"):
+            _brain_cmd(["--unknown-flag", "value"])
+
+    def test_skills_register_already_registered(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Cover lines 343-344: ValueError caught for duplicate registration."""
+        from labclaw.cli import _skills_cmd
+
+        def _raise_on_register(skill: Any) -> None:
+            raise ValueError("already registered")
+
+        with patch("labclaw.skills.registry.skill_registry") as mock_reg:
+            mock_reg.register = MagicMock(side_effect=_raise_on_register)
+            _skills_cmd(["register"])
+        captured = capsys.readouterr()
+        assert "Registered 0 skills" in captured.out
