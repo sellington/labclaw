@@ -58,6 +58,7 @@ Layer 1: HARDWARE                — Devices, interfaces, manager, safety
 - **Plugin registry** — entry-point based (`labclaw.plugins` group); three types: `DevicePlugin`, `DomainPlugin`, `AnalysisPlugin`
 - **Governance engine** — role-based permissions + safety rules + immutable audit log
 - **Three-tier memory** — Tier A (Markdown/git), Tier B (Knowledge Graph), Tier C (Agent Shared Blocks)
+- **Cloud Brain skills** — CloudSkill protocol + SkillRegistry for external AI tools (ToolUniverse, Biomni, K-Dense)
 
 ## Important Rules
 
@@ -90,6 +91,7 @@ src/labclaw/
 ├── agents/         # Agent runtime, orchestrator, tool definitions
 ├── orchestrator/   # Top-level scientific method state machine
 ├── plugins/        # Plugin loader, registry, protocols, domain packs
+├── skills/         # Cloud Brain: skill registry, adapters, server, web UI
 ├── llm/            # LLM provider abstraction (Anthropic, OpenAI, local)
 ├── edge/           # File watchers, quality checks, device adapters, CLI
 ├── api/            # REST API (FastAPI) on port 18800

@@ -42,6 +42,16 @@
 - Structured JSON logging
 - Enhanced `/health` endpoint (component status, last cycle time)
 
+## v0.0.12 — Cloud Brain (C6: ACCESS)
+
+- Cloud Brain skill registry with CloudSkill protocol
+- Real SDK integrations: ToolUniverse (2,062 tools), Biomni (150+), K-Dense (170+)
+- Claude Life Sciences MCP integration (PubMed, bioRxiv, ChEMBL, OpenTargets, ClinicalTrials)
+- Cloud Brain server: `labclaw brain --port 18802`
+- Web UI: Dashboard, Tool Explorer, Query Playground, API Docs
+- API auth (X-API-Key), rate limiting, response size limits
+- Deployed and verified on DigitalOcean ($48/mo)
+
 ## Planned: v0.1.0 — Public Release
 
 v0.1.0 will be the first public release. All 5 capabilities proven by integration tests and BDD scenarios.

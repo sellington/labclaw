@@ -165,33 +165,36 @@ labclaw --dashboard              Launch Streamlit dashboard
 labclaw --api [PORT]             Launch REST API only
 ```
 
-## Cloud Brain — Scientific AI Skills
+## Cloud Brain — 2,400+ Scientific AI Tools
 
-Cloud Brain gives your lab a single API to access scientific databases and AI tools:
+Cloud Brain gives your lab a single API to access 2,400+ scientific tools across 456 categories:
 
 ```bash
 labclaw brain --port 18802
 ```
 
-| Skill | What It Does |
-|-------|-------------|
-| **LifeSci** | Search PubMed, UniProt, ChEMBL, NCBI Gene, BLAST |
-| **ToolUniverse** | Discover and run 200+ bioinformatics tools |
-| **Biomni** | Multi-modal biological data analysis |
-| **KDense** | Knowledge-dense skill reasoning |
-| **Write** | AI-assisted scientific writing |
+| Skill | Tools | What It Does |
+|-------|-------|-------------|
+| **ToolUniverse** | 2,062 | UniProt, ChEMBL, PubChem, OpenTargets, ClinicalTrials, FDA, Semantic Scholar |
+| **Biomni** | 150+ | Autonomous biomedical AI agent across 59 databases (Stanford SNAP) |
+| **K-Dense** | 170+ | Scientific skills for bioinformatics, cheminformatics, lab automation |
+| **LifeSci MCP** | 5 | PubMed, bioRxiv, ChEMBL, OpenTargets, ClinicalTrials via MCP |
+| **Write** | 2 | Scientific section generation (abstract/methods/results) and citation formatting |
+| **LifeSci** | 2 | Life science domain reasoning and experiment design |
 
 ```bash
-# Search PubMed for recent CRISPR papers
+# List all available tools
 curl http://localhost:18802/brain/tools
 
-# Execute a tool
+# Look up BRCA1 protein function
 curl -X POST http://localhost:18802/brain/execute \
   -H "Content-Type: application/json" \
-  -d '{"tool_name": "search_pubmed", "arguments": {"query": "CRISPR delivery 2025"}}'
+  -d '{"tool_name": "tu_run", "arguments": {"name": "UniProt_get_function_by_accession", "arguments": {"accession": "P38398"}}}'
 ```
 
-See the [Cloud Brain Tutorial](docs/tutorials/cloud-brain-guide.md) for detailed examples.
+Web UI: Dashboard, Tool Explorer, Query Playground, and API Docs at `http://localhost:18802/`.
+
+See the [Cloud Brain User Guide](docs/cloud-brain-user-guide.md) for detailed examples.
 
 ## The Daemon
 
