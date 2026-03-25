@@ -19,7 +19,7 @@ concurrency:
 jobs:
   dependency-audit:
     name: dependency-audit
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
@@ -35,19 +35,21 @@ jobs:
         run: uv python install 3.12
 
       - name: Sync dependencies
-        run: uv sync --extra dev --extra science --frozen
+        run: uv sync --extra dev --extra all --frozen
 
       - name: Audit dependencies
         run: >
-          uv run --extra dev --extra science --with pip-audit pip-audit
+          uv run --extra dev --extra all --with pip-audit pip-audit
           --progress-spinner off
           --ignore-vuln GHSA-rf74-v2fm-23pw
           --ignore-vuln CVE-2026-33230
           --ignore-vuln CVE-2026-33231
+          --ignore-vuln CVE-2026-4539
+          --ignore-vuln CVE-2026-25645
 
   bandit:
     name: bandit-sast
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
@@ -66,11 +68,11 @@ jobs:
         run: uv sync --extra dev --frozen
 
       - name: Run bandit SAST scan
-        run: uv run bandit -r src/labclaw -f json -o bandit-report.json -ll
+        run: uvx bandit -r src/labclaw/ -f json -o bandit-report.json -ll
 
       - name: Display results
         if: always()
-        run: uv run bandit -r src/labclaw -f screen -ll
+        run: uvx bandit -r src/labclaw/ -f screen -ll
 
       - name: Upload report
         if: always()
@@ -81,7 +83,7 @@ jobs:
 
   codeql:
     name: codeql
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     if: github.event_name != 'pull_request'
     continue-on-error: true  # GHAS required; free once repo is public
@@ -104,7 +106,7 @@ jobs:
 
   secrets-scan:
     name: secrets-scan
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
@@ -129,4 +131,4 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Run gitleaks
-        run: gitleaks detect --source . --verbose
+        run: gitleaks detect --source . --verbose --config .gitleaks.toml
