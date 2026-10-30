@@ -55,6 +55,10 @@ class TestBrainRegisterDefaultsExceptions:
                 "labclaw.brain.skills.docs.DocsSkill",
                 side_effect=RuntimeError("docs fail"),
             ),
+            patch(
+                "labclaw.brain.skills.vision.VisionSkill",
+                side_effect=RuntimeError("vision fail"),
+            ),
         ):
             brain_mod._register_defaults(reg)
 
@@ -62,6 +66,7 @@ class TestBrainRegisterDefaultsExceptions:
         assert "devices" not in reg.list_skills()
         assert "cad_mcp" not in reg.list_skills()
         assert "docs" not in reg.list_skills()
+        assert "vision" not in reg.list_skills()
 
     def test_apply_shop_profile_missing_and_valid(self, tmp_path, monkeypatch) -> None:
         reg = SkillRegistry()

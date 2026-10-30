@@ -37,6 +37,7 @@ class TestSkillCapability:
             "device_control",
             "cad_cam",
             "documentation",
+            "computer_vision",
         }
         assert {v.value for v in SkillCapability} == expected
 

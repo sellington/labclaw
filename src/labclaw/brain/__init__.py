@@ -64,6 +64,14 @@ def _register_defaults(registry: SkillRegistry) -> None:
     except Exception:
         logger.warning("Failed to register DocsSkill", exc_info=True)
 
+    # Top-Down Computer Vision & uArm Visual Servoing skill
+    try:
+        from labclaw.brain.skills.vision import VisionSkill
+
+        registry.register(VisionSkill())
+    except Exception:
+        logger.warning("Failed to register VisionSkill", exc_info=True)
+
     # Write (technical & documentation writing)
     try:
         from labclaw.brain.skills.write import WriteSkill

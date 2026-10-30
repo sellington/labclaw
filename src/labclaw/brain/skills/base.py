@@ -22,6 +22,7 @@ class SkillCapability(StrEnum):
     DEVICE_CONTROL = "device_control"
     CAD_CAM = "cad_cam"
     DOCUMENTATION = "documentation"
+    COMPUTER_VISION = "computer_vision"
 
 
 class SkillMetadata(BaseModel):

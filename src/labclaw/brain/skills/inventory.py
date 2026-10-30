@@ -291,6 +291,7 @@ class InventorySkill:
             "inventory_seed_defaults": self._seed_defaults,
             "inventory_import_order": self._import_order,
             "inventory_bin_label_svg": self._bin_label_svg,
+            "inventory_recommend_bin": self._recommend_bin,
         }
         handler = handlers.get(tool_name)
         if handler is None:
@@ -638,7 +639,9 @@ class InventorySkill:
         )
 
     async def _bin_label_svg(self, sku: str = "", **kwargs: Any) -> BrainResult:
-        """Generate a printable SVG storage bin label with SKU, location, and barcode."""
+        """Generate a printable SVG storage bin label with 4x4 ArUco fiducial and barcode."""
+        from labclaw.brain.skills.vision import aruco_bits_4x4, sku_to_aruco_id
+
         sku_clean = sku.strip().upper()
         row = self._conn.execute(
             "SELECT * FROM inventory_items WHERE UPPER(sku) = ?", (sku_clean,)
@@ -647,24 +650,147 @@ class InventorySkill:
             return BrainResult(success=False, error=f"SKU '{sku}' not found")
 
         item = self._row_to_dict(row)
-        bars = "".join(
-            f"<rect x='{14 + idx * 6}' y='62' width='{(ord(ch) % 3) + 1}' height='22' fill='#000'/>"
-            for idx, ch in enumerate(sku_clean[:28])
-        )
+        aruco_id = sku_to_aruco_id(sku_clean)
+        bits = aruco_bits_4x4(aruco_id)
+        # Render 6x6 ArUco grid (outer 1-cell border is black=0, inner 4x4 is bits)
+        cells: list[str] = ["<rect x='10' y='12' width='72' height='72' fill='#000'/>"]
+        for r in range(4):
+            for c in range(4):
+                if bits[r][c] == 1:
+                    cx = 22 + c * 12
+                    cy = 24 + r * 12
+                    cells.append(f"<rect x='{cx}' y='{cy}' width='12' height='12' fill='#fff'/>")
+
         svg = (
-            "<svg xmlns='http://www.w3.org/2000/svg' width='240' height='96' viewBox='0 0 240 96'>"
-            "<rect width='240' height='96' rx='6' fill='#fff' stroke='#000' stroke-width='2'/>"
-            f"<text x='12' y='24' font-family='monospace' font-size='14'>"
+            "<svg xmlns='http://www.w3.org/2000/svg' width='260' height='96' viewBox='0 0 260 96'>"
+            "<rect width='260' height='96' rx='6' fill='#fff' stroke='#000' stroke-width='2'/>"
+            f"{''.join(cells)}"
+            f"<text x='92' y='26' font-family='monospace' font-size='13' font-weight='bold'>"
             f"{item['sku']}</text>"
-            f"<text x='12' y='42' font-family='sans-serif' font-size='11'>"
-            f"{item['name'][:30]}</text>"
-            f"<text x='12' y='56' font-family='monospace' font-size='10'>"
-            f"LOC: {item['location']} | QTY: {item['quantity']} {item['unit']}</text>"
-            f"{bars}</svg>"
+            f"<text x='92' y='44' font-family='sans-serif' font-size='11'>"
+            f"{item['name'][:24]}</text>"
+            f"<text x='92' y='62' font-family='monospace' font-size='10'>"
+            f"LOC: {item['location']} | QTY: {item['quantity']}</text>"
+            f"<text x='92' y='78' font-family='monospace' font-size='10'>"
+            f"ARUCO #{aruco_id} (4x4)</text></svg>"
         )
         return BrainResult(
             success=True,
-            data={"sku": item["sku"], "location": item["location"], "svg": svg},
+            data={
+                "sku": item["sku"],
+                "aruco_id": aruco_id,
+                "location": item["location"],
+                "svg": svg,
+            },
+        )
+
+    async def _recommend_bin(
+        self,
+        sku: str = "MCU-XIAO-ESP32C6",
+        part_length_mm: float = 21.0,
+        part_width_mm: float = 17.8,
+        part_height_mm: float = 5.0,
+        current_qty: int = 4,
+        max_qty: int = 20,
+        package_type: str = "loose",
+        **kwargs: Any,
+    ) -> BrainResult:
+        """Recommend a 3D-printed Gridfinity bin size and snap-in ArUco tile for a part."""
+        from labclaw.brain.skills.vision import sku_to_aruco_id
+
+        if max_qty <= 0 or min(part_length_mm, part_width_mm, part_height_mm) <= 0:
+            return BrainResult(success=False, error="Part dimensions and max_qty must be > 0")
+
+        packing_eff = 0.65 if package_type in ("cut_tape", "tray", "tube") else 0.42
+        part_vol_cm3 = (
+            float(part_length_mm) * float(part_width_mm) * float(part_height_mm)
+        ) / 1000.0
+        req_max_vol_cm3 = round((part_vol_cm3 * int(max_qty)) / packing_eff * 1.25, 2)
+        req_cur_vol_cm3 = round((part_vol_cm3 * int(current_qty)) / packing_eff, 2)
+
+        # Standard Makerspace Gridfinity Bin Series (42mm XY grid, 7mm Z unit)
+        catalog = [
+            {
+                "code": "GF-1x1x3U",
+                "gx": 1,
+                "gy": 1,
+                "u": 3,
+                "outer_mm": [42, 42, 21],
+                "vol_cm3": 20.0,
+                "max_len_mm": 36.0,
+            },
+            {
+                "code": "GF-1x2x3U",
+                "gx": 1,
+                "gy": 2,
+                "u": 3,
+                "outer_mm": [42, 84, 21],
+                "vol_cm3": 44.0,
+                "max_len_mm": 78.0,
+            },
+            {
+                "code": "GF-2x2x3U",
+                "gx": 2,
+                "gy": 2,
+                "u": 3,
+                "outer_mm": [84, 84, 21],
+                "vol_cm3": 92.0,
+                "max_len_mm": 78.0,
+            },
+            {
+                "code": "GF-2x2x6U",
+                "gx": 2,
+                "gy": 2,
+                "u": 6,
+                "outer_mm": [84, 84, 42],
+                "vol_cm3": 195.0,
+                "max_len_mm": 78.0,
+            },
+            {
+                "code": "GF-2x3x6U",
+                "gx": 2,
+                "gy": 3,
+                "u": 6,
+                "outer_mm": [84, 126, 42],
+                "vol_cm3": 300.0,
+                "max_len_mm": 120.0,
+            },
+        ]
+        longest_dim = max(float(part_length_mm), float(part_width_mm))
+        chosen = catalog[-1]
+        for cand in catalog:
+            vol_ok = float(cand["vol_cm3"]) >= req_max_vol_cm3  # type: ignore[arg-type]
+            len_ok = float(cand["max_len_mm"]) >= longest_dim  # type: ignore[arg-type]
+            if vol_ok and len_ok:
+                chosen = cand
+                break
+
+        aruco_id = sku_to_aruco_id(sku)
+        return BrainResult(
+            success=True,
+            data={
+                "sku": sku.strip().upper(),
+                "aruco_id": aruco_id,
+                "recommended_bin": chosen["code"],
+                "gridfinity_units": {
+                    "grid_x": chosen["gx"],
+                    "grid_y": chosen["gy"],
+                    "height_u": chosen["u"],
+                },
+                "outer_dimensions_mm": chosen["outer_mm"],
+                "usable_volume_cm3": chosen["vol_cm3"],
+                "required_volume_at_current_qty_cm3": req_cur_vol_cm3,
+                "required_volume_at_max_qty_cm3": req_max_vol_cm3,
+                "snap_in_aruco_tile_mm": {
+                    "width": 36.0,
+                    "depth": 16.0,
+                    "thickness": 1.2,
+                    "aruco_marker_size_mm": 14.0,
+                    "filament_layers": (
+                        "0.0-0.6mm Matte White PLA base + 0.6-1.2mm Matte Black PLA ArUco"
+                    ),
+                },
+            },
         )
 
     async def list_tools(self) -> list[ToolInfo]:
@@ -731,7 +857,13 @@ class InventorySkill:
             ),
             ToolInfo(
                 name="inventory_bin_label_svg",
-                description="Generate a printable SVG storage bin label with barcode for a SKU.",
+                description="Generate a printable SVG storage bin label with 4x4 ArUco fiducial.",
+                skill="inventory",
+                category="inventory",
+            ),
+            ToolInfo(
+                name="inventory_recommend_bin",
+                description="Recommend a 3D-printed Gridfinity bin size and snap-in ArUco tile.",
                 skill="inventory",
                 category="inventory",
             ),

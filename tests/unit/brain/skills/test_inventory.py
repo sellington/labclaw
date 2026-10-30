@@ -177,11 +177,40 @@ class TestInventorySkill:
         lbl = await skill.execute("inventory_bin_label_svg", sku="C12345")
         assert lbl.success is True
         assert "<svg" in lbl.data["svg"]
+        assert "ARUCO #" in lbl.data["svg"]
+
+        bad_bin = await skill.execute("inventory_recommend_bin", max_qty=0)
+        assert bad_bin.success is False
+
+        rec1 = await skill.execute(
+            "inventory_recommend_bin",
+            sku="C12345",
+            part_length_mm=10.0,
+            part_width_mm=8.0,
+            part_height_mm=3.0,
+            current_qty=10,
+            max_qty=20,
+            package_type="cut_tape",
+        )
+        assert rec1.success is True
+        assert rec1.data["recommended_bin"] == "GF-1x1x3U"
+
+        rec_big = await skill.execute(
+            "inventory_recommend_bin",
+            sku="MOTOR-BLDC",
+            part_length_mm=95.0,
+            part_width_mm=50.0,
+            part_height_mm=35.0,
+            current_qty=2,
+            max_qty=10,
+        )
+        assert rec_big.success is True
+        assert rec_big.data["recommended_bin"] == "GF-2x3x6U"
 
     async def test_list_tools_metadata(self) -> None:
         skill = InventorySkill()
         tools = await skill.list_tools()
-        assert len(tools) == 9
+        assert len(tools) == 10
         assert {t.name for t in tools} == {
             "inventory_list",
             "inventory_search",
@@ -192,4 +221,5 @@ class TestInventorySkill:
             "inventory_seed_defaults",
             "inventory_import_order",
             "inventory_bin_label_svg",
+            "inventory_recommend_bin",
         }
