@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -261,11 +261,37 @@ class TestMakerspaceCliCommands:
     def test_cli_simulators_starts_uvicorn(self) -> None:
         with (
             patch("sys.argv", ["makerclaw", "simulators", "--port", "18899"]),
-            patch("uvicorn.run") as mock_run,
+            patch("asyncio.run") as mock_run,
             patch("builtins.print"),
         ):
             main()
         mock_run.assert_called_once()
+        coro = mock_run.call_args[0][0]
+        coro.close()  # silence "coroutine never awaited" RuntimeWarning
+
+    def test_start_simulators_runs_http_and_fusion_tcp(self) -> None:
+        """_start_simulators starts the Fusion TCP server and the uvicorn HTTP server."""
+        from labclaw.cli import _start_simulators
+
+        dummy_fusion = MagicMock()
+        dummy_fusion.close = MagicMock()
+        dummy_fusion.wait_closed = AsyncMock()
+        with (
+            patch(
+                "labclaw.simulators.start_fusion_tcp_simulator",
+                new=AsyncMock(return_value=dummy_fusion),
+            ) as mock_fusion,
+            patch("uvicorn.Config"),
+            patch("uvicorn.Server") as mock_server_cls,
+            patch("builtins.print"),
+        ):
+            mock_server = mock_server_cls.return_value
+            mock_server.serve = AsyncMock()
+            _start_simulators(port=18899, host="127.0.0.1")
+        mock_fusion.assert_called_once_with(host="127.0.0.1", port=19876)
+        mock_server.serve.assert_called_once()
+        dummy_fusion.close.assert_called_once()
+        dummy_fusion.wait_closed.assert_called_once()
 
 
 class TestHardwareAndCadSimulators:

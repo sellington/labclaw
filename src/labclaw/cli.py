@@ -160,13 +160,30 @@ def _start_brain(port: int, host: str = "127.0.0.1") -> None:
 
 
 def _start_simulators(port: int, host: str = "127.0.0.1") -> None:
-    """Start the sandboxed hardware simulator suite."""
+    """Start the sandboxed hardware simulator suite (Moonraker/gSender HTTP + Fusion360 TCP)."""
+    import asyncio
+
     import uvicorn
 
-    from labclaw.simulators import create_simulator_app
+    from labclaw.simulators import create_simulator_app, start_fusion_tcp_simulator
 
-    print(f"Starting MakerClaw Hardware Simulators on {host}:{port}...")
-    uvicorn.run(create_simulator_app(), host=host, port=port)
+    fusion_port = 19876
+
+    async def _run() -> None:
+        fusion_server = await start_fusion_tcp_simulator(host="127.0.0.1", port=fusion_port)
+        config = uvicorn.Config(create_simulator_app(), host=host, port=port, log_level="info")
+        server = uvicorn.Server(config)
+        try:
+            await server.serve()
+        finally:
+            fusion_server.close()
+            await fusion_server.wait_closed()
+
+    print(
+        f"Starting MakerClaw Hardware Simulators on {host}:{port} "
+        f"(+ Fusion360 TCP socket on 127.0.0.1:{fusion_port})..."
+    )
+    asyncio.run(_run())
 
 
 def _start_mcp() -> None:
