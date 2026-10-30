@@ -29,7 +29,7 @@ class TestDevicesSkill:
             name="Prusa MK4",
             device_type="3d_printer",
             protocol="octoprint",
-            endpoint="http://10.1.1.199:5000",
+            endpoint="http://192.0.2.10:5000",
         )
         assert ok_reg.success is True
         assert ok_reg.data["device_id"] == "prusa-mk4"

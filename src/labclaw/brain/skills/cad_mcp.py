@@ -31,12 +31,12 @@ _MATERIAL_DENSITIES_G_CM3: dict[str, float] = {
 _DEFAULT_CAD_ENDPOINTS: dict[str, dict[str, Any]] = {
     "fusion360-bench": {
         "endpoint_id": "fusion360-bench",
-        "name": "Autodesk Fusion 360 MCP (cubiko-bench Always-On CAD Host)",
+        "name": "Autodesk Fusion 360 MCP (Bench CAD Host)",
         "domain": "cad_cam",
         "transport": "tcp_socket",
-        "host": "10.1.1.211",
+        "host": "127.0.0.1",
         "port": 9876,
-        "mcp_command": "uvx fusion360-mcp-server --mode socket --host 10.1.1.211",
+        "mcp_command": "uvx fusion360-mcp-server --mode socket --host 127.0.0.1",
         "tool_prefix": "mcp__fusion360__",
         "tool_count": 84,
         "units": "cm (internal geometry), mm (user parameters)",
@@ -52,12 +52,12 @@ _DEFAULT_CAD_ENDPOINTS: dict[str, dict[str, Any]] = {
     },
     "fusion360-workstation": {
         "endpoint_id": "fusion360-workstation",
-        "name": "Autodesk Fusion 360 MCP (Primary M3 Pro Workstation)",
+        "name": "Autodesk Fusion 360 MCP (Remote Workstation)",
         "domain": "cad_cam",
         "transport": "tcp_socket",
-        "host": "10.1.1.184",
+        "host": "cad-workstation.local",
         "port": 9876,
-        "mcp_command": "uvx fusion360-mcp-server --mode socket --host 10.1.1.184",
+        "mcp_command": "uvx fusion360-mcp-server --mode socket --host cad-workstation.local",
         "tool_prefix": "mcp__fusion360__",
         "tool_count": 84,
         "units": "cm (internal geometry), mm (user parameters)",
@@ -72,12 +72,12 @@ _DEFAULT_CAD_ENDPOINTS: dict[str, dict[str, Any]] = {
     },
     "kicad-eda": {
         "endpoint_id": "kicad-eda",
-        "name": "KiCad 10 MCP Server + Freerouting + kicad-cli",
+        "name": "KiCad MCP Server + Freerouting + kicad-cli",
         "domain": "eda_pcb",
         "transport": "stdio",
         "host": "127.0.0.1",
         "port": 0,
-        "mcp_command": "node /Users/sellington/mcp/KiCAD-MCP-Server/dist/index.js",
+        "mcp_command": "kicad-mcp-server",
         "tool_prefix": "mcp__kicad__",
         "tool_count": 248,
         "units": "mm",
@@ -98,7 +98,7 @@ _DEFAULT_CAD_ENDPOINTS: dict[str, dict[str, Any]] = {
         "transport": "cli",
         "host": "127.0.0.1",
         "port": 0,
-        "mcp_command": "/opt/homebrew/bin/pcb2gcode",
+        "mcp_command": "pcb2gcode",
         "tool_prefix": "cam_",
         "tool_count": 4,
         "units": "mm",
@@ -408,7 +408,7 @@ class CadMcpSkill:
         plunge_z = 45 if int(spindle_rpm) >= 15000 else 30
 
         cmd = (
-            f"/opt/homebrew/bin/pcb2gcode --noconfigfile "
+            f"pcb2gcode --noconfigfile "
             f"--back={gerber_dir}/B_Cu.gbr --outline={gerber_dir}/Edge_Cuts.gbr "
             f"--drill={gerber_dir}/drills.drl --output-dir={output_dir} "
             f"--metric=1 --metricoutput=1 --zero-start=1 --mirror-axis={mirror_axis_mm}mm "

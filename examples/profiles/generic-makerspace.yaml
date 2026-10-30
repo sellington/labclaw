@@ -1,0 +1,43 @@
+# Generic Makerspace Profile Template
+# Copy this file to ~/.makerclaw/profile.yaml (or set LABCLAW_PROFILE=/path/to/profile.yaml)
+# to customize your shop's machines, CAD MCP endpoints, inventory catalog, and SOPs
+# without modifying the MakerClaw repository.
+
+shop_name: "Community Makerspace"
+
+devices:
+  - device_id: "prusa-mk4-1"
+    name: "Prusa MK4 (Bay 1)"
+    device_type: "3d_printer"
+    protocol: "octoprint"
+    endpoint: "http://prusa-bay1.local:5000"
+    envelope_mm: { x: 250.0, y: 210.0, z: 220.0 }
+    capabilities: ["print_gcode", "telemetry", "pause", "emergency_stop"]
+
+  - device_id: "shapeoko-cnc-1"
+    name: "Shapeoko 4 XXL CNC Router"
+    device_type: "cnc"
+    protocol: "gsender"
+    endpoint: "http://cnc-bay1.local:8000"
+    envelope_mm: { x: 838.0, y: 838.0, z: 100.0 }
+    capabilities: ["run_gcode", "home", "jog", "zero_wcs", "emergency_stop"]
+
+cad_endpoints:
+  - endpoint_id: "fusion360-local"
+    name: "Autodesk Fusion 360 MCP (Local Workstation)"
+    domain: "cad_cam"
+    transport: "tcp_socket"
+    host: "127.0.0.1"
+    port: 9876
+    mcp_command: "uvx fusion360-mcp-server --mode socket --host 127.0.0.1"
+    tool_prefix: "mcp__fusion360__"
+
+inventory:
+  - sku: "FIL-PETG-ORANGE"
+    name: "PETG Filament 1.75mm Orange (1kg Spool)"
+    category: "filament"
+    quantity: 3000.0
+    unit: "g"
+    min_quantity: 500.0
+    location: "rack-a1"
+    unit_cost_usd: 0.022

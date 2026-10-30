@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import Any
+
+import yaml
 
 from labclaw.brain.skills.registry import SkillRegistry
 from labclaw.brain.types import BrainResult, HealthStatus, ToolInfo
@@ -61,6 +64,11 @@ def _register_defaults(registry: SkillRegistry) -> None:
     except Exception:
         logger.warning("Failed to register DocsSkill", exc_info=True)
 
+    # Apply optional instance-specific shop profile overlay (LABCLAW_PROFILE)
+    profile_path = os.environ.get("LABCLAW_PROFILE", "").strip()
+    if profile_path:
+        apply_shop_profile(registry, Path(profile_path))
+
     # ToolUniverse (optional dep)
     try:
         from labclaw.brain.skills.tooluniverse import ToolUniverseSkill
@@ -86,6 +94,45 @@ def _register_defaults(registry: SkillRegistry) -> None:
         registry.register(WriteSkill(llm_provider=llm_provider))
     except Exception:
         logger.warning("Failed to register Write", exc_info=True)
+
+
+def apply_shop_profile(registry: SkillRegistry, profile_path: Path) -> dict[str, int]:
+    """Load an external YAML/JSON shop profile into registered skills."""
+    counts = {"inventory": 0, "devices": 0, "cad_endpoints": 0, "docs": 0}
+    if not profile_path.exists():
+        logger.warning("Shop profile file not found: %s", profile_path)
+        return counts
+
+    data = yaml.safe_load(profile_path.read_text(encoding="utf-8")) or {}
+    inv_skill: Any = registry._skills.get("inventory")
+    if inv_skill is not None and isinstance(data.get("inventory"), list):
+        counts["inventory"] = inv_skill._insert_catalog(data["inventory"])
+
+    dev_skill: Any = registry._skills.get("devices")
+    if dev_skill is not None and isinstance(data.get("devices"), list):
+        for dev in data["devices"]:
+            did = str(dev.get("device_id", "")).strip()
+            if did:
+                dev_skill._devices[did] = dict(dev)
+                counts["devices"] += 1
+
+    cad_skill: Any = registry._skills.get("cad_mcp")
+    if cad_skill is not None and isinstance(data.get("cad_endpoints"), list):
+        for ep in data["cad_endpoints"]:
+            eid = str(ep.get("endpoint_id", "")).strip()
+            if eid:
+                cad_skill._endpoints[eid] = dict(ep)
+                counts["cad_endpoints"] += 1
+
+    docs_skill: Any = registry._skills.get("docs")
+    if docs_skill is not None and isinstance(data.get("docs"), list):
+        for doc in data["docs"]:
+            slug = str(doc.get("slug", "")).strip()
+            if slug:
+                docs_skill._docs[slug] = dict(doc)
+                counts["docs"] += 1
+
+    return counts
 
 
 def _create_llm_provider() -> Any | None:

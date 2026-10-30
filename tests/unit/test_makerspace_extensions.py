@@ -63,6 +63,37 @@ class TestBrainRegisterDefaultsExceptions:
         assert "cad_mcp" not in reg.list_skills()
         assert "docs" not in reg.list_skills()
 
+    def test_apply_shop_profile_missing_and_valid(self, tmp_path, monkeypatch) -> None:
+        reg = SkillRegistry()
+        missing = brain_mod.apply_shop_profile(reg, tmp_path / "nope.yaml")
+        assert missing == {"inventory": 0, "devices": 0, "cad_endpoints": 0, "docs": 0}
+
+        profile_file = tmp_path / "shop.yaml"
+        profile_file.write_text(
+            "inventory:\n"
+            "  - sku: CUSTOM-1\n"
+            "    name: Custom Part\n"
+            "    category: electronics\n"
+            "    quantity: 5\n"
+            "devices:\n"
+            "  - device_id: custom-printer\n"
+            "    name: Custom Printer\n"
+            "    device_type: 3d_printer\n"
+            "cad_endpoints:\n"
+            "  - endpoint_id: custom-cad\n"
+            "    name: Custom CAD\n"
+            "docs:\n"
+            "  - slug: custom-sop\n"
+            "    title: Custom SOP\n"
+            "    category: sop\n"
+            "    content: '# Custom'\n"
+        )
+        monkeypatch.setenv("LABCLAW_PROFILE", str(profile_file))
+        brain_mod._register_defaults(reg)
+        assert "custom-printer" in reg._skills["devices"]._devices  # type: ignore[attr-defined]
+        assert "custom-cad" in reg._skills["cad_mcp"]._endpoints  # type: ignore[attr-defined]
+        assert "custom-sop" in reg._skills["docs"]._docs  # type: ignore[attr-defined]
+
 
 class TestMakerspaceServerEndpoints:
     async def test_dashboard_html(self, client) -> None:
