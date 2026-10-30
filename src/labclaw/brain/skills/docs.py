@@ -138,7 +138,9 @@ class DocsSkill:
             "docs_save": self._save_doc,
             "docs_generate_sop": self._generate_sop,
             "maker_reason": self._maker_reason,
+            "reason": self._maker_reason,
             "design_project": self._design_project,
+            "design_experiment": self._design_project,
         }
         handler = handlers.get(tool_name)
         if handler is None:
@@ -420,6 +422,12 @@ class DocsSkill:
                 description=(
                     "Generate a 5-phase makerspace hardware, CAD, PCB, and firmware build plan."
                 ),
+                skill="docs",
+                category="reasoning",
+            ),
+            ToolInfo(
+                name="reason",
+                description="Makerspace and engineering domain reasoning grounded in shop SOPs.",
                 skill="docs",
                 category="reasoning",
             ),

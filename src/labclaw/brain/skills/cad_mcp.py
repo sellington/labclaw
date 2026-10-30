@@ -142,6 +142,7 @@ class CadMcpSkill:
             "cad_verify_mass_delta": self._verify_mass_delta,
             "cad_enclosure_calculator": self._enclosure_calculator,
             "cam_pcb2gcode_command": self._pcb2gcode_command,
+            "cad_federate_tools": self._federate_tools,
         }
         handler = handlers.get(tool_name)
         if handler is None:
@@ -440,6 +441,62 @@ class CadMcpSkill:
             },
         )
 
+    async def _federate_tools(
+        self,
+        task_query: str = "parametric enclosure",
+        max_tools: int = 8,
+        **kwargs: Any,
+    ) -> BrainResult:
+        """Context-window-aware MCP tool multiplexer across Fusion 360, KiCad, and CAM."""
+        catalog = [
+            {
+                "tool": "mcp__fusion360__execute_code",
+                "endpoint_id": "fusion360-bench",
+                "tags": ["cad", "fusion", "extrude", "sketch", "enclosure", "fillet", "boolean"],
+                "verification_gate": "cad_verify_mass_delta",
+            },
+            {
+                "tool": "mcp__fusion360__export_stl",
+                "endpoint_id": "fusion360-bench",
+                "tags": ["cad", "stl", "export", "3d-print", "enclosure"],
+                "verification_gate": "trimesh.is_watertight",
+            },
+            {
+                "tool": "mcp__kicad__batch_add_components",
+                "endpoint_id": "kicad-eda",
+                "tags": ["pcb", "kicad", "schematic", "electronics", "lcsc"],
+                "verification_gate": "mcp__kicad__run_erc",
+            },
+            {
+                "tool": "mcp__kicad__autoroute",
+                "endpoint_id": "kicad-eda",
+                "tags": ["pcb", "kicad", "route", "freerouting", "layout", "motor"],
+                "verification_gate": "kicad-cli pcb drc (errors == 0)",
+            },
+            {
+                "tool": "cam_pcb2gcode_command",
+                "endpoint_id": "pcb2gcode-cam",
+                "tags": ["cnc", "pcb", "gerber", "gcode", "isolation", "mill"],
+                "verification_gate": "device_validate_gcode",
+            },
+        ]
+        q_tokens = {w.lower() for w in task_query.replace("-", " ").split() if len(w) >= 2}
+        q_low = task_query.lower()
+        scored = sorted(
+            catalog,
+            key=lambda item: sum(1 for t in item["tags"] if t in q_tokens or t in q_low),
+            reverse=True,
+        )
+        selected = scored[: max(1, int(max_tools))]
+        return BrainResult(
+            success=True,
+            data={
+                "task_query": task_query,
+                "selected_tools": selected,
+                "count": len(selected),
+            },
+        )
+
     async def list_tools(self) -> list[ToolInfo]:
         """Return all CAD/EDA/CAM tools."""
         return [
@@ -489,6 +546,15 @@ class CadMcpSkill:
                 ),
                 skill="cad_mcp",
                 category="cnc",
+            ),
+            ToolInfo(
+                name="cad_federate_tools",
+                description=(
+                    "Active MCP multiplexer: select relevant Fusion 360, KiCad, and CAM tools "
+                    "for a task with mandatory verification gates."
+                ),
+                skill="cad_mcp",
+                category="cad",
             ),
         ]
 

@@ -3,21 +3,20 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "labclaw"
-version = "0.2.0"
-description = "MakerClaw / LabClaw — Unified Makerspace Gateway for Inventory, SOP Docs, 3D Printers, CNCs, and CAD/EDA MCP Endpoints"
+name = "makerclaw"
+version = "0.3.0"
+description = "MakerClaw — Unified Makerspace AI Control Plane for Inventory, SOP Docs, 3D Printers, CNCs, and CAD/EDA MCP Endpoints"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"
 authors = [
-    { name = "MakerClaw / LabClaw Team" },
+    { name = "MakerClaw Team" },
 ]
-keywords = ["makerspace", "cnc", "3d-printing", "cad", "kicad", "fusion360", "mcp", "inventory", "lab-automation"]
+keywords = ["makerspace", "cnc", "3d-printing", "cad", "kicad", "fusion360", "mcp", "inventory", "mechatronics"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Manufacturing",
-    "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -36,9 +35,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-tooluniverse = [
-    "tooluniverse>=1.1.0; python_version>='3.11'",
-]
 llm = [
     "anthropic>=0.40.0,<1.0.0",
     "openai>=1.0.0,<3.0.0",
@@ -55,7 +51,7 @@ dev = [
     "build>=1.0,<2.0",
 ]
 all = [
-    "labclaw[tooluniverse,llm]",
+    "makerclaw[llm]",
 ]
 
 [project.urls]
@@ -66,8 +62,11 @@ Issues = "https://github.com/sellington/labclaw/issues"
 Changelog = "https://github.com/sellington/labclaw/blob/main/CHANGELOG.md"
 
 [project.scripts]
-labclaw = "labclaw.cli:main"
 makerclaw = "labclaw.cli:main"
+labclaw = "labclaw.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/labclaw", "src/makerclaw"]
 
 [tool.ruff]
 target-version = "py311"
@@ -85,7 +84,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["labclaw"]
+source = ["labclaw", "makerclaw"]
 omit = [
     "*/tests/*",
     "*/integration/*",

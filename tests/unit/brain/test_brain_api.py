@@ -228,32 +228,6 @@ class TestGetRegistry:
 
 
 class TestRegisterDefaults:
-    def test_handles_import_error_gracefully(self):
-        import labclaw.brain as brain_mod
-        from labclaw.brain.skills.registry import SkillRegistry
-
-        registry = SkillRegistry()
-
-        with patch(
-            "labclaw.brain.skills.tooluniverse.ToolUniverseSkill",
-            side_effect=ImportError("no tooluniverse"),
-        ):
-            # Should not raise
-            brain_mod._register_defaults(registry)
-
-    def test_handles_generic_exception_gracefully(self):
-        import labclaw.brain as brain_mod
-        from labclaw.brain.skills.registry import SkillRegistry
-
-        registry = SkillRegistry()
-
-        with patch(
-            "labclaw.brain.skills.tooluniverse.ToolUniverseSkill",
-            side_effect=RuntimeError("boom"),
-        ):
-            # Should not raise
-            brain_mod._register_defaults(registry)
-
     def test_registers_available_skills(self):
         import labclaw.brain as brain_mod
         from labclaw.brain.skills.registry import SkillRegistry
@@ -261,7 +235,9 @@ class TestRegisterDefaults:
         registry = SkillRegistry()
         brain_mod._register_defaults(registry)
 
-        # At minimum, LifeSci and Write should register (no external deps)
         skill_names = registry.list_skills()
-        assert "lifesci" in skill_names
+        assert "inventory" in skill_names
+        assert "devices" in skill_names
+        assert "cad_mcp" in skill_names
+        assert "docs" in skill_names
         assert "write" in skill_names

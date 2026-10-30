@@ -101,6 +101,20 @@ class TestMakerspaceServerEndpoints:
         assert resp.status_code == 200
         assert "MakerClaw Control Plane" in resp.text
 
+        setup_resp = await client.get("/setup")
+        assert setup_resp.status_code == 200
+        assert "MakerClaw Setup Wizard" in setup_resp.text
+
+        prof_resp = await client.post(
+            "/brain/profile",
+            json={
+                "shop_name": "Test FabLab",
+                "devices": [{"device_id": "laser-1", "name": "CO2 Laser", "device_type": "laser"}],
+            },
+        )
+        assert prof_resp.status_code == 200
+        assert prof_resp.json()["applied"]["devices"] == 1
+
     async def test_inventory_endpoints(self, client) -> None:
         r1 = await client.get("/brain/inventory?category=filament")
         assert r1.status_code == 200
@@ -243,3 +257,79 @@ class TestMakerspaceCliCommands:
         with patch("sys.argv", ["makerclaw", "docs", "--search", "spoilboard"]):
             main()
         assert "sop-cnc-cubiko" in capsys.readouterr().out
+
+    def test_cli_simulators_starts_uvicorn(self) -> None:
+        with (
+            patch("sys.argv", ["makerclaw", "simulators", "--port", "18899"]),
+            patch("uvicorn.run") as mock_run,
+            patch("builtins.print"),
+        ):
+            main()
+        mock_run.assert_called_once()
+
+
+class TestHardwareAndCadSimulators:
+    async def test_moonraker_and_gsender_http_simulators(self) -> None:
+        import makerclaw
+        from labclaw.simulators import create_simulator_app
+
+        assert makerclaw.__version__ == "0.3.0"
+        sim_app = create_simulator_app()
+        async with AsyncClient(
+            transport=ASGITransport(app=sim_app), base_url="http://sim"
+        ) as sim_client:
+            q = await sim_client.get("/printer/objects/query")
+            assert q.status_code == 200
+            assert q.json()["result"]["status"]["print_stats"]["state"] == "standby"
+
+            sc = await sim_client.post("/printer/gcode/script", json={"script": "G28"})
+            assert sc.json()["result"] == "ok"
+
+            st = await sim_client.post(
+                "/printer/print/start",
+                json={"filename": "gear.gcode", "filament_used_g": 9.5},
+            )
+            assert st.json()["print_stats"]["state"] == "printing"
+
+            pa = await sim_client.post("/printer/print/pause")
+            assert pa.json()["state"] == "paused"
+
+            ca = await sim_client.post("/printer/print/cancel")
+            assert ca.json()["state"] == "cancelled"
+
+            si = await sim_client.post("/api/signin")
+            tok = si.json()["token"]
+
+            ct = await sim_client.get(f"/api/controllers?token={tok}")
+            assert ct.json()[0]["authenticated"] is True
+
+            gc = await sim_client.post("/api/gcode", json={"script": "G0 X10 Y10\nG1 Z-0.06"})
+            assert gc.json()["lines"] == 2
+
+            ov = await sim_client.get("/api/version")
+            assert ov.json()["server"] == "1.10.0-sim"
+
+    async def test_fusion_tcp_simulator(self) -> None:
+        import asyncio
+
+        from labclaw.simulators import handle_fusion_command, start_fusion_tcp_simulator
+
+        scene = {"bodies": []}
+        assert handle_fusion_command({"command": "ping"}, scene)["pong"] is True
+        assert handle_fusion_command({"command": "create_box", "params": {"width": 2}}, scene)["ok"]
+        assert handle_fusion_command({"command": "get_scene_info"}, scene)["body_count"] == 1
+        assert handle_fusion_command({"command": "extrude"}, scene)["command"] == "extrude"
+
+        server = await start_fusion_tcp_simulator(host="127.0.0.1", port=0)
+        port = server.sockets[0].getsockname()[1]
+        try:
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            writer.write(b'{"command": "ping"}\n')
+            await writer.drain()
+            line = await reader.readline()
+            writer.close()
+            await writer.wait_closed()
+            assert json.loads(line.decode())["pong"] is True
+        finally:
+            server.close()
+            await server.wait_closed()

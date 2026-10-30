@@ -128,4 +128,4 @@ class TestDocsSkill:
         assert len(ok_proj.data["phases"]) == 5
 
         tools = await skill.list_tools()
-        assert len(tools) == 7
+        assert len(tools) == 8

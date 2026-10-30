@@ -1,7 +1,4 @@
-"""Tests for _register_defaults exception handlers in brain/__init__.py.
-
-Covers lines 42-43 (LifeSci generic exception) and 50-51 (Write generic exception).
-"""
+"""Tests for _register_defaults exception handlers in brain/__init__.py."""
 
 from __future__ import annotations
 
@@ -23,27 +20,7 @@ def _reset_registry():
 
 
 class TestRegisterDefaultsGenericException:
-    """Cover the generic Exception handlers for LifeSci and Write registration."""
-
-    def test_lifesci_generic_exception_caught(self) -> None:
-        """When LifeSciSkill() raises a non-ImportError, it's caught and logged."""
-        import labclaw.brain as brain_mod
-
-        registry = SkillRegistry()
-
-        with patch(
-            "labclaw.brain.skills.lifesci.LifeSciSkill",
-            side_effect=RuntimeError("LLM init failed"),
-        ):
-            # ToolUniverse may also fail — patch it too
-            with patch(
-                "labclaw.brain.skills.tooluniverse.ToolUniverseSkill",
-                side_effect=ImportError("no tooluniverse"),
-            ):
-                brain_mod._register_defaults(registry)
-
-        # LifeSci should NOT be registered since it raised
-        assert "lifesci" not in registry.list_skills()
+    """Cover the generic Exception handler for Write registration."""
 
     def test_write_generic_exception_caught(self) -> None:
         """When WriteSkill() raises a non-ImportError, it's caught and logged."""
@@ -52,18 +29,10 @@ class TestRegisterDefaultsGenericException:
         registry = SkillRegistry()
 
         with patch(
-            "labclaw.brain.skills.lifesci.LifeSciSkill",
-            side_effect=RuntimeError("no LLM"),
+            "labclaw.brain.skills.write.WriteSkill",
+            side_effect=ValueError("write init boom"),
         ):
-            with patch(
-                "labclaw.brain.skills.write.WriteSkill",
-                side_effect=ValueError("write init boom"),
-            ):
-                with patch(
-                    "labclaw.brain.skills.tooluniverse.ToolUniverseSkill",
-                    side_effect=ImportError("no tooluniverse"),
-                ):
-                    brain_mod._register_defaults(registry)
+            brain_mod._register_defaults(registry)
 
-        # Write should NOT be registered
         assert "write" not in registry.list_skills()
+        assert "inventory" in registry.list_skills()

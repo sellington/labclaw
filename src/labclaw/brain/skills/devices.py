@@ -294,6 +294,9 @@ class DevicesSkill:
             "device_validate_gcode": self._validate_gcode,
             "device_send_command": self._send_command,
             "device_feeds_and_speeds": self._feeds_and_speeds,
+            "device_upload_job": self._upload_job,
+            "device_probe_heightmap": self._probe_heightmap,
+            "device_render_gcode_svg": self._render_gcode_svg,
         }
         handler = handlers.get(tool_name)
         if handler is None:
@@ -625,6 +628,131 @@ class DevicesSkill:
             },
         )
 
+    async def _upload_job(
+        self,
+        device_id: str = "bambu-p1s",
+        filename: str = "job.gcode",
+        gcode: str = "",
+        filament_used_g: float = 0.0,
+        spoilboard_present: bool = True,
+        **kwargs: Any,
+    ) -> BrainResult:
+        """Validate G-code safety and upload/start a print or CNC job."""
+        did = device_id.strip()
+        if did not in self._devices:
+            return BrainResult(success=False, error=f"Device '{did}' is not registered")
+
+        val = await self._validate_gcode(
+            gcode=gcode, device_id=did, spoilboard_present=spoilboard_present
+        )
+        if not val.success or not val.data["safe"]:
+            err_msg = val.error or "; ".join(val.data.get("violations", []))
+            return BrainResult(success=False, error=f"Pre-flight safety check failed: {err_msg}")
+
+        self._devices[did]["status"] = "busy"
+        return BrainResult(
+            success=True,
+            data={
+                "device_id": did,
+                "filename": filename,
+                "status": "printing_or_machining",
+                "filament_reserved_g": float(filament_used_g),
+                "bounding_box_mm": val.data["bounding_box_mm"],
+            },
+        )
+
+    async def _probe_heightmap(
+        self,
+        width_x_mm: float = 40.0,
+        height_y_mm: float = 30.0,
+        grid_x: int = 4,
+        grid_y: int = 4,
+        z_offsets: list[float] | None = None,
+        gcode: str = "",
+        **kwargs: Any,
+    ) -> BrainResult:
+        """Generate a snake-order G38.2 heightmap probe program and optionally Z-warp G-code."""
+        gx = max(2, int(grid_x))
+        gy = max(2, int(grid_y))
+        points: list[dict[str, float]] = []
+        probe_lines = ["G21", "G90", "G0 Z2.0"]
+        for j in range(gy):
+            y = round((float(height_y_mm) * j) / (gy - 1), 3)
+            xs_idx = range(gx) if j % 2 == 0 else range(gx - 1, -1, -1)
+            for i in xs_idx:
+                x = round((float(width_x_mm) * i) / (gx - 1), 3)
+                points.append({"x": x, "y": y})
+                probe_lines.extend([f"G0 X{x} Y{y}", "G38.2 Z-4.0 F35.0", "G4 P0.6", "G0 Z2.0"])
+        probe_lines.append("G0 X0 Y0")
+
+        warped_gcode = ""
+        if gcode.strip() and z_offsets:
+            avg_z = sum(float(z) for z in z_offsets) / len(z_offsets)
+            warped_lines: list[str] = []
+            for ln in gcode.splitlines():
+                m = re.search(r"Z([+-]?\d+(?:\.\d+)?)", ln.upper())
+                if m:
+                    new_z = round(float(m.group(1)) + avg_z, 4)
+                    ln = re.sub(r"[Zz][+-]?\d+(?:\.\d+)?", f"Z{new_z}", ln)
+                warped_lines.append(ln)
+            warped_gcode = "\n".join(warped_lines)
+
+        return BrainResult(
+            success=True,
+            data={
+                "grid_size": [gx, gy],
+                "point_count": len(points),
+                "points": points,
+                "probe_gcode": "\n".join(probe_lines),
+                "warped_gcode": warped_gcode,
+            },
+        )
+
+    async def _render_gcode_svg(
+        self,
+        gcode: str = "",
+        device_id: str = "cubiko-cnc",
+        **kwargs: Any,
+    ) -> BrainResult:
+        """Render a 2D SVG toolpath visualization from G-code."""
+        if not gcode.strip():
+            return BrainResult(success=False, error="G-code string is empty")
+
+        device = self._devices.get(device_id, _DEFAULT_DEVICES["cubiko-cnc"])
+        env = device.get("envelope_mm", {"x": 150.0, "y": 110.0, "z": 40.0})
+        w = float(env["x"])
+        h = float(env["y"])
+
+        x, y = 0.0, 0.0
+        segments: list[str] = []
+        for raw in gcode.splitlines():
+            line = raw.split(";", 1)[0].strip().upper()
+            if not line.startswith(("G0", "G00", "G1", "G01")):
+                continue
+            mx = re.search(r"X([+-]?\d+(?:\.\d+)?)", line)
+            my = re.search(r"Y([+-]?\d+(?:\.\d+)?)", line)
+            nx = float(mx.group(1)) if mx else x
+            ny = float(my.group(1)) if my else y
+            color = "#58a6ff" if line.startswith(("G0 ", "G00")) else "#3fb950"
+            dash = " stroke-dasharray='3,2'" if color == "#58a6ff" else ""
+            segments.append(
+                f"<line x1='{x:.2f}' y1='{h - y:.2f}' x2='{nx:.2f}' y2='{h - ny:.2f}' "
+                f"stroke='{color}' stroke-width='0.8'{dash}/>"
+            )
+            x, y = nx, ny
+
+        svg = (
+            f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='-5 -5 {w + 10} {h + 10}' "
+            "width='360' height='260' style='background:#010409'>"
+            f"<rect x='0' y='0' width='{w}' height='{h}' "
+            "fill='none' stroke='#30363d' stroke-width='1'/>"
+            f"{''.join(segments)}</svg>"
+        )
+        return BrainResult(
+            success=True,
+            data={"device_id": device_id, "segment_count": len(segments), "svg": svg},
+        )
+
     async def list_tools(self) -> list[ToolInfo]:
         """Return all device & CNC tools."""
         return [
@@ -672,6 +800,24 @@ class DevicesSkill:
                     "Calculate verified CNC feeds, speeds, stepdown, and tooling for FR-4 PCBs, "
                     "plywood, 6061 aluminum, C360 brass, and anodized aluminum."
                 ),
+                skill="devices",
+                category="cnc",
+            ),
+            ToolInfo(
+                name="device_upload_job",
+                description="Validate G-code safety and upload/start a print or CNC job.",
+                skill="devices",
+                category="devices",
+            ),
+            ToolInfo(
+                name="device_probe_heightmap",
+                description="Generate a snake-order G38.2 heightmap probe and Z-warp G-code.",
+                skill="devices",
+                category="cnc",
+            ),
+            ToolInfo(
+                name="device_render_gcode_svg",
+                description="Render a 2D SVG toolpath preview from G-code against machine bounds.",
                 skill="devices",
                 category="cnc",
             ),

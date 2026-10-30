@@ -1,4 +1,4 @@
-"""MakerClaw / LabClaw Cloud Brain — unified gateway for makerspace & lab tools."""
+"""MakerClaw Cloud Brain — unified gateway for makerspace inventory, docs, devices & CAD MCP."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def _get_registry() -> SkillRegistry:
 
 
 def _register_defaults(registry: SkillRegistry) -> None:
-    """Register built-in makerspace and scientific skills. Gracefully skip unavailable ones."""
+    """Register built-in makerspace skills. Gracefully skip unavailable ones."""
     llm_provider = _create_llm_provider()
 
     # Makerspace Inventory skill (SQLite)
@@ -64,30 +64,7 @@ def _register_defaults(registry: SkillRegistry) -> None:
     except Exception:
         logger.warning("Failed to register DocsSkill", exc_info=True)
 
-    # Apply optional instance-specific shop profile overlay (LABCLAW_PROFILE)
-    profile_path = os.environ.get("LABCLAW_PROFILE", "").strip()
-    if profile_path:
-        apply_shop_profile(registry, Path(profile_path))
-
-    # ToolUniverse (optional dep)
-    try:
-        from labclaw.brain.skills.tooluniverse import ToolUniverseSkill
-
-        registry.register(ToolUniverseSkill())
-    except ImportError:
-        logger.info("ToolUniverse not installed, skipping")
-    except Exception:
-        logger.warning("Failed to register ToolUniverse", exc_info=True)
-
-    # LifeSci (needs LLM provider)
-    try:
-        from labclaw.brain.skills.lifesci import LifeSciSkill
-
-        registry.register(LifeSciSkill(llm_provider=llm_provider))
-    except Exception:
-        logger.warning("Failed to register LifeSci", exc_info=True)
-
-    # Write (needs LLM provider)
+    # Write (technical & documentation writing)
     try:
         from labclaw.brain.skills.write import WriteSkill
 
@@ -95,15 +72,26 @@ def _register_defaults(registry: SkillRegistry) -> None:
     except Exception:
         logger.warning("Failed to register Write", exc_info=True)
 
+    # Apply optional instance-specific shop profile overlay (LABCLAW_PROFILE)
+    profile_path = os.environ.get("LABCLAW_PROFILE", "").strip()
+    if profile_path:
+        apply_shop_profile(registry, Path(profile_path))
 
-def apply_shop_profile(registry: SkillRegistry, profile_path: Path) -> dict[str, int]:
-    """Load an external YAML/JSON shop profile into registered skills."""
+
+def apply_shop_profile(
+    registry: SkillRegistry,
+    profile_source: Path | dict[str, Any],
+) -> dict[str, int]:
+    """Load an external YAML/JSON shop profile or dict into registered skills."""
     counts = {"inventory": 0, "devices": 0, "cad_endpoints": 0, "docs": 0}
-    if not profile_path.exists():
-        logger.warning("Shop profile file not found: %s", profile_path)
-        return counts
+    if isinstance(profile_source, Path):
+        if not profile_source.exists():
+            logger.warning("Shop profile file not found: %s", profile_source)
+            return counts
+        data = yaml.safe_load(profile_source.read_text(encoding="utf-8")) or {}
+    else:
+        data = profile_source
 
-    data = yaml.safe_load(profile_path.read_text(encoding="utf-8")) or {}
     inv_skill: Any = registry._skills.get("inventory")
     if inv_skill is not None and isinstance(data.get("inventory"), list):
         counts["inventory"] = inv_skill._insert_catalog(data["inventory"])
@@ -165,7 +153,7 @@ def _create_llm_provider() -> Any | None:
 
 
 async def execute(tool_name: str, **kwargs: Any) -> BrainResult:
-    """Execute a registered makerspace or lab tool by name."""
+    """Execute a registered makerspace tool by name."""
     return await _get_registry().execute(tool_name, **kwargs)
 
 
@@ -175,7 +163,7 @@ async def list_tools(category: str = "") -> list[ToolInfo]:
 
 
 async def reason(question: str, *, domain: str = "general", context: str = "") -> BrainResult:
-    """Domain reasoning via LLM."""
+    """Makerspace & engineering domain reasoning."""
     return await _get_registry().execute(
         "reason", question=question, domain=domain, context=context
     )
@@ -200,5 +188,5 @@ async def health() -> HealthStatus:
         status=status,
         skills=skill_health,
         tool_count=len(all_tools),
-        version=getattr(labclaw, "__version__", "0.0.1"),
+        version=getattr(labclaw, "__version__", "0.3.0"),
     )

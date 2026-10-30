@@ -26,6 +26,12 @@ def main() -> None:
     brain_p.add_argument("--host", default="127.0.0.1")
     brain_p.add_argument("--port", type=int, default=18802)
 
+    sim_p = sub.add_parser(
+        "simulators", help="Start sandboxed Moonraker, gSender & Fusion360 simulators"
+    )
+    sim_p.add_argument("--host", default="127.0.0.1")
+    sim_p.add_argument("--port", type=int, default=18803)
+
     sub.add_parser("mcp", help="Start MCP server for Claude Desktop / Hermes Agent")
 
     tools_p = sub.add_parser("tools", help="List available tools")
@@ -50,6 +56,8 @@ def main() -> None:
             asyncio.run(_demo())
     elif args.command == "brain":
         _start_brain(args.port, args.host)
+    elif args.command == "simulators":
+        _start_simulators(args.port, args.host)
     elif args.command == "mcp":
         _start_mcp()
     elif args.command == "tools":
@@ -149,6 +157,16 @@ def _start_brain(port: int, host: str = "127.0.0.1") -> None:
 
     print(f"Starting MakerClaw Cloud Brain on {host}:{port}...")
     uvicorn.run(app, host=host, port=port)
+
+
+def _start_simulators(port: int, host: str = "127.0.0.1") -> None:
+    """Start the sandboxed hardware simulator suite."""
+    import uvicorn
+
+    from labclaw.simulators import create_simulator_app
+
+    print(f"Starting MakerClaw Hardware Simulators on {host}:{port}...")
+    uvicorn.run(create_simulator_app(), host=host, port=port)
 
 
 def _start_mcp() -> None:

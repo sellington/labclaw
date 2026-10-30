@@ -1,4 +1,4 @@
-"""MakerClaw / LabClaw Cloud Brain REST API & Web Dashboard."""
+"""MakerClaw Cloud Brain REST API, Interactive Operator Console & Setup Wizard."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -40,7 +40,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 class ExecuteRequest(BaseModel):
     tool_name: str
-    arguments: dict[str, Any] = {}
+    arguments: dict[str, Any] = Field(default_factory=dict)
 
 
 class ReasonRequest(BaseModel):
@@ -52,6 +52,14 @@ class ReasonRequest(BaseModel):
 class WriteRequest(BaseModel):
     section: str
     context: str
+
+
+class ShopProfileRequest(BaseModel):
+    shop_name: str = "MakerClaw Workshop"
+    inventory: list[dict[str, Any]] = Field(default_factory=list)
+    devices: list[dict[str, Any]] = Field(default_factory=list)
+    cad_endpoints: list[dict[str, Any]] = Field(default_factory=list)
+    docs: list[dict[str, Any]] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +107,7 @@ app = FastAPI(
     description=(
         "Unified Makerspace Gateway — Inventory, Docs, 3D Printers, CNCs & CAD/EDA MCP Endpoints"
     ),
-    version="0.2.0",
+    version="0.3.0",
 )
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
@@ -146,17 +154,20 @@ def _truncate_response(data: Any) -> dict[str, Any] | list[Any]:
 
 _DASHBOARD_HTML = (
     "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'/>"
-    "<title>MakerClaw — Makerspace Brain & MCP Gateway</title>"
+    "<title>MakerClaw — Makerspace Operator Console & MCP Gateway</title>"
     "<style>"
     "body{background:#0d1117;color:#e6edf3;font-family:monospace;margin:0;padding:24px;}"
-    "h1{color:#58a6ff;margin-top:0;}"
-    ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;}"
+    "h1{color:#58a6ff;margin-top:0;} a{color:#58a6ff;}"
+    ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px;}"
     ".card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;}"
     ".card h2{font-size:15px;color:#79c0ff;margin:0 0 10px 0;border-bottom:1px solid #21262d;}"
-    "pre{background:#010409;padding:10px;border-radius:6px;overflow:auto;max-height:280px;}"
+    "pre{background:#010409;padding:10px;border-radius:6px;overflow:auto;max-height:260px;}"
+    "textarea,input{background:#010409;color:#e6edf3;border:1px solid #30363d;padding:6px;}"
+    "button{background:#238636;color:#fff;border:0;padding:6px 12px;border-radius:6px;}"
     ".badge{display:inline-block;padding:2px 8px;border-radius:12px;background:#238636;color:#fff;}"
     "</style></head><body>"
-    "<h1>MakerClaw Control Plane <span class='badge'>MCP + REST</span></h1>"
+    "<h1>MakerClaw Control Plane <span class='badge'>v0.3.0</span> "
+    "<a href='/setup' style='font-size:14px;margin-left:12px;'>[First-Run Setup Wizard]</a></h1>"
     "<p>Unified Makerspace Gateway: Inventory, SOP Docs, 3D Printers, CNCs &amp; CAD MCP.</p>"
     "<div class='grid'>"
     "<div class='card'><h2>System Health</h2><pre id='health'>Loading...</pre></div>"
@@ -174,6 +185,34 @@ _DASHBOARD_HTML = (
     "</script></body></html>"
 )
 
+_SETUP_HTML = (
+    "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'/>"
+    "<title>MakerClaw — First-Run Setup Wizard</title>"
+    "<style>"
+    "body{background:#0d1117;color:#e6edf3;font-family:monospace;margin:0;padding:24px;}"
+    ".box{max-width:720px;background:#161b22;border:1px solid #30363d;padding:16px;}"
+    "input,textarea{background:#010409;color:#e6edf3;border:1px solid #30363d;width:96%;}"
+    "button{background:#238636;color:#fff;border:0;padding:8px 16px;border-radius:6px;}"
+    "</style></head><body>"
+    "<div class='box'><h1>MakerClaw Setup Wizard</h1>"
+    "<p>Configure your makerspace machines, CAD MCP endpoints, and starter inventory.</p>"
+    "<label>Shop Name</label><input id='shop_name' value='My Makerspace'/>"
+    "<label>API Key (if configured)</label><input id='api_key' placeholder='Optional X-API-Key'/>"
+    "<label>Profile JSON (devices, cad_endpoints, inventory)</label>"
+    "<textarea id='payload' rows='10'>"
+    '{"shop_name": "My Makerspace", "devices": [], "cad_endpoints": []}</textarea>'
+    "<button onclick='saveProfile()'>Save &amp; Apply Profile</button>"
+    "<pre id='out'></pre><p><a href='/' style='color:#58a6ff;'>Back to Control Plane</a></p></div>"
+    "<script>"
+    "async function saveProfile(){"
+    "const k=document.getElementById('api_key').value;"
+    "const h={'Content-Type':'application/json'}; if(k) h['X-API-Key']=k;"
+    "const b=document.getElementById('payload').value;"
+    "const r=await fetch('/brain/profile',{method:'POST',headers:h,body:b});"
+    "document.getElementById('out').textContent=JSON.stringify(await r.json(),null,2);}"
+    "</script></body></html>"
+)
+
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -184,6 +223,21 @@ _DASHBOARD_HTML = (
 async def get_dashboard() -> HTMLResponse:
     """Serve the MakerClaw web control plane dashboard."""
     return HTMLResponse(content=_DASHBOARD_HTML)
+
+
+@app.get("/setup", response_class=HTMLResponse)
+async def get_setup_wizard() -> HTMLResponse:
+    """Serve the MakerClaw first-run setup wizard."""
+    return HTMLResponse(content=_SETUP_HTML)
+
+
+@app.post("/brain/profile", dependencies=[Depends(verify_api_key)])
+@limiter.limit(_RATE_LIMIT)
+async def post_profile(request: Request, body: ShopProfileRequest) -> dict[str, Any]:
+    """Apply a Shop Profile (devices, CAD endpoints, inventory, docs) into the live registry."""
+    reg = brain._get_registry()
+    counts = brain.apply_shop_profile(reg, body.model_dump())
+    return {"success": True, "shop_name": body.shop_name, "applied": counts}
 
 
 @app.get("/brain/health")

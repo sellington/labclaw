@@ -142,5 +142,12 @@ class TestCadMcpSkill:
         assert p2g.success is True
         assert "--mirror-axis=20.0mm" in p2g.data["pcb2gcode_command"]
 
+        fed = await skill.execute(
+            "cad_federate_tools", task_query="kicad pcb autoroute motor", max_tools=3
+        )
+        assert fed.success is True
+        assert fed.data["count"] == 3
+        assert fed.data["selected_tools"][0]["endpoint_id"] == "kicad-eda"
+
         tools = await skill.list_tools()
-        assert len(tools) == 6
+        assert len(tools) == 7

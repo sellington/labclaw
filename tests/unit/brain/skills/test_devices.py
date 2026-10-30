@@ -186,7 +186,53 @@ class TestDevicesSkill:
         unknown = await skill.execute("device_feeds_and_speeds", material="unobtainium")
         assert unknown.success is False
 
+    async def test_upload_job_probe_heightmap_and_render_svg(self) -> None:
+        skill = DevicesSkill()
+
+        missing_dev = await skill.execute("device_upload_job", device_id="no-dev", gcode="G0 X1")
+        assert missing_dev.success is False
+
+        bad_job = await skill.execute(
+            "device_upload_job", device_id="cubiko-cnc", gcode="T1 M6\nG0 X999"
+        )
+        assert bad_job.success is False
+
+        ok_job = await skill.execute(
+            "device_upload_job",
+            device_id="bambu-p1s",
+            filename="frame.gcode",
+            gcode="M104 S215\nG1 X40 Y40 Z0.2 F1200",
+            filament_used_g=18.5,
+        )
+        assert ok_job.success is True
+        assert ok_job.data["status"] == "printing_or_machining"
+
+        hm = await skill.execute(
+            "device_probe_heightmap",
+            width_x_mm=30.0,
+            height_y_mm=20.0,
+            grid_x=3,
+            grid_y=2,
+            z_offsets=[-0.02, -0.04],
+            gcode="G0 X0 Y0 Z2.0\nG1 X10 Y10 Z-0.06 F120",
+        )
+        assert hm.success is True
+        assert hm.data["point_count"] == 6
+        assert "Z-0.09" in hm.data["warped_gcode"]
+
+        empty_svg = await skill.execute("device_render_gcode_svg", gcode="   ")
+        assert empty_svg.success is False
+
+        svg_res = await skill.execute(
+            "device_render_gcode_svg",
+            device_id="cubiko-cnc",
+            gcode="; start\nM3 S10000\nG0 X10 Y10\nG1 X40 Y30 F120\nG1 X40\n",
+        )
+        assert svg_res.success is True
+        assert svg_res.data["segment_count"] == 3
+        assert "<svg" in svg_res.data["svg"]
+
     async def test_list_tools(self) -> None:
         skill = DevicesSkill()
         tools = await skill.list_tools()
-        assert len(tools) == 6
+        assert len(tools) == 9

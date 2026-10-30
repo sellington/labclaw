@@ -156,10 +156,32 @@ class TestInventorySkill:
         assert len(res.data["to_purchase"]) == 2
         assert res.data["estimated_purchase_cost_usd"] > 0
 
+    async def test_import_order_and_bin_label_svg(self) -> None:
+        skill = InventorySkill()
+
+        empty_csv = await skill.execute("inventory_import_order", csv_text="   ")
+        assert empty_csv.success is False
+
+        csv_data = (
+            "LCSC Part #,Comment,Quantity,Unit Price,Footprint\n"
+            "C12345,10k 0603 Resistor,100,0.01,R_0603\n"
+            ",Missing SKU Row,10,0.05,\n"
+        )
+        imp = await skill.execute("inventory_import_order", csv_text=csv_data, vendor="lcsc")
+        assert imp.success is True
+        assert imp.data["imported_skus"] == ["C12345"]
+
+        missing_lbl = await skill.execute("inventory_bin_label_svg", sku="NO-SUCH-SKU")
+        assert missing_lbl.success is False
+
+        lbl = await skill.execute("inventory_bin_label_svg", sku="C12345")
+        assert lbl.success is True
+        assert "<svg" in lbl.data["svg"]
+
     async def test_list_tools_metadata(self) -> None:
         skill = InventorySkill()
         tools = await skill.list_tools()
-        assert len(tools) == 7
+        assert len(tools) == 9
         assert {t.name for t in tools} == {
             "inventory_list",
             "inventory_search",
@@ -168,4 +190,6 @@ class TestInventorySkill:
             "inventory_check_bom",
             "inventory_low_stock",
             "inventory_seed_defaults",
+            "inventory_import_order",
+            "inventory_bin_label_svg",
         }

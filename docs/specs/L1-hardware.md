@@ -1,185 +1,19 @@
-# L1 Hardware Spec
+# L1 Makerspace Hardware Spec
 
-**Layer:** Hardware (L1)
-**Design doc reference:** Section 3.1 (Hardware Layer)
+**Layer:** Hardware Drivers, Safety Interlocks & Simulators (L1)
 
 ## Purpose
 
-The hardware layer is the physical foundation of LabClaw. Every instrument in the lab is a managed resource with identity, capabilities, state, and safety constraints. For the MVP, the focus is on file-based devices (watchdog monitors output folders), with the architecture supporting serial, network, GPIO/DAQ, and software bridge interfaces.
+The hardware layer manages 3D printers, CNC routers, laser cutters, and bench instruments in a makerspace. Every machine has a work envelope (`envelope_mm`), controller protocol (`gsender_rest`, `moonraker`, `bambu_mqtt`, `octoprint`), spindle/thermal limits, and pre-flight G-code safety validation.
 
----
+## Core Tools (`DevicesSkill`)
 
-## Pydantic Schemas
-
-### DeviceCapabilities
-
-```python
-class DeviceCapabilities(BaseModel):
-    """What a device can observe, control, and produce."""
-    can_observe: list[str] = []       # e.g. ["video", "fluorescence"]
-    can_control: list[str] = []       # e.g. ["capture", "set_exposure"]
-    data_formats: list[str] = []      # e.g. ["tiff", "avi", "csv"]
-    supports_streaming: bool = False
-```
-
-### DeviceRecord
-
-```python
-class DeviceRecord(BaseModel):
-    """Full identity and state of a registered device."""
-    device_id: str = Field(default_factory=_uuid)
-    name: str
-    device_type: str               # "camera", "two_photon", "qpcr", etc.
-    model: str = ""
-    manufacturer: str = ""
-    location: str = ""
-    interface_type: DeviceInterfaceType = DeviceInterfaceType.FILE_BASED
-    status: DeviceStatus = DeviceStatus.OFFLINE
-    capabilities: DeviceCapabilities = Field(default_factory=DeviceCapabilities)
-    watch_path: Path | None = None  # For file-based devices
-    registered_at: datetime = Field(default_factory=_now)
-    last_seen: datetime = Field(default_factory=_now)
-```
-
-### HardwareCommand
-
-```python
-class HardwareCommand(BaseModel):
-    """A command to be executed on a device."""
-    command_id: str = Field(default_factory=_uuid)
-    device_id: str
-    action: str                    # e.g. "capture", "set_exposure", "start_imaging"
-    parameters: dict[str, Any] = Field(default_factory=dict)
-    requested_by: str | None = None
-    approved_by: str | None = None
-```
-
-### SafetyCheckResult
-
-```python
-class SafetyCheckResult(BaseModel):
-    """Result of a hardware safety check."""
-    device_id: str
-    check_type: str                # "pre_command", "health", "calibration"
-    passed: bool
-    level: SafetyLevel
-    details: str = ""
-    timestamp: datetime = Field(default_factory=_now)
-```
-
-### CalibrationRecord
-
-```python
-class CalibrationRecord(BaseModel):
-    """Record of a device calibration event."""
-    device_id: str
-    calibrated_by: str
-    parameters: dict[str, Any] = Field(default_factory=dict)
-    timestamp: datetime = Field(default_factory=_now)
-    next_due: datetime | None = None
-```
-
----
-
-## Public Interfaces
-
-### DeviceRegistry
-
-In-memory registry for all lab devices. Emits events on state changes.
-
-```python
-class DeviceRegistry:
-    def __init__(self) -> None: ...
-
-    def register(self, record: DeviceRecord) -> DeviceRecord:
-        """Register a device. Raises ValueError if device_id already exists."""
-
-    def get(self, device_id: str) -> DeviceRecord:
-        """Get device by ID. Raises KeyError if not found."""
-
-    def update_status(self, device_id: str, status: DeviceStatus) -> None:
-        """Update device status. Raises KeyError if not found."""
-
-    def list_devices(self, status: DeviceStatus | None = None) -> list[DeviceRecord]:
-        """List all devices, optionally filtered by status."""
-
-    def unregister(self, device_id: str) -> None:
-        """Remove device from registry. Raises KeyError if not found."""
-```
-
-### HardwareSafetyChecker
-
-Validates commands before execution.
-
-```python
-class HardwareSafetyChecker:
-    def __init__(self, registry: DeviceRegistry) -> None: ...
-
-    def check(self, command: HardwareCommand) -> SafetyCheckResult:
-        """Validate a command against device state and capabilities."""
-
-    def get_safety_history(self, device_id: str) -> list[SafetyCheckResult]:
-        """Return all safety check results for a device."""
-```
-
-### HardwareManager
-
-Coordinates registry and safety for command execution.
-
-```python
-class HardwareManager:
-    def __init__(self, registry: DeviceRegistry, safety: HardwareSafetyChecker) -> None: ...
-
-    def execute_command(self, command: HardwareCommand) -> SafetyCheckResult:
-        """Run safety check, then execute if safe. Emits hardware.command.executed."""
-```
-
----
-
-## Events
-
-| Event Name | Payload | Emitted By |
-|---|---|---|
-| `hardware.device.registered` | `{device_id, name, device_type}` | DeviceRegistry.register() |
-| `hardware.device.status_changed` | `{device_id, old_status, new_status}` | DeviceRegistry.update_status() |
-| `hardware.device.unregistered` | `{device_id, name}` | DeviceRegistry.unregister() |
-| `hardware.safety.checked` | `{device_id, action, passed, level}` | HardwareSafetyChecker.check() |
-| `hardware.command.executed` | `{device_id, action, passed, level}` | HardwareManager.execute_command() |
-
----
-
-## Boundary Contracts
-
-- All device IDs are UUIDs (auto-generated by default)
-- All timestamps are timezone-aware UTC
-- File paths use `pathlib.Path`
-- DeviceStatus and SafetyLevel use core.schemas enums
-- Events follow `{layer}.{module}.{action}` naming convention
-- Pydantic models validate at boundary (registration, command submission)
-
-## Error Conditions
-
-| Condition | Exception | Raised By |
-|---|---|---|
-| Register duplicate device_id | `ValueError` | DeviceRegistry.register() |
-| Get/update/unregister nonexistent device | `KeyError` | DeviceRegistry.get/update_status/unregister() |
-| Safety check on nonexistent device | Returns failed SafetyCheckResult | HardwareSafetyChecker.check() |
-| Command on offline/error device | Returns blocked SafetyCheckResult | HardwareSafetyChecker.check() |
-
-## Storage
-
-- MVP: in-memory `dict[str, DeviceRecord]`
-- Future: SQLite persistence via `aiosqlite`
-- Calibration history: in-memory `list[CalibrationRecord]` (future: SQLite)
-- Safety history: in-memory `list[SafetyCheckResult]` (future: SQLite)
-
-## Acceptance Criteria
-
-- [ ] DeviceRecord validates and auto-generates device_id and timestamps
-- [ ] DeviceRegistry CRUD operations work correctly
-- [ ] DeviceRegistry emits events on register, update_status, unregister
-- [ ] HardwareSafetyChecker blocks commands on offline/error devices
-- [ ] HardwareSafetyChecker returns SafetyCheckResult with appropriate level
-- [ ] HardwareManager coordinates registry + safety for command execution
-- [ ] All schemas importable from `labclaw.hardware`
-- [ ] All BDD scenarios pass
+- `device_list`: List registered 3D printers, CNCs, and bench instruments.
+- `device_register`: Register a new printer, CNC machine, or robot arm.
+- `device_status`: Query live machine telemetry via Moonraker, gSender REST, or OctoPrint.
+- `device_validate_gcode`: Verify G-code bounding box, Z plunge vs. cutter flute length, spoilboard protection, spindle RPM, and thermal ceilings.
+- `device_send_command`: Dispatch a safety-checked command (`home`, `jog`, `zero_wcs`, `run_gcode`, `emergency_stop`).
+- `device_feeds_and_speeds`: Compute verified CNC RPM, feed rate, plunge rate, and stepdown for FR-4 PCBs, plywood, 6061 aluminum, and brass.
+- `device_upload_job`: Validate G-code safety and upload/start a print or CNC job.
+- `device_probe_heightmap`: Generate a snake-order `G38.2` copper/stock heightmap probe program and Z-warp target G-code.
+- `device_render_gcode_svg`: Render a 2D SVG toolpath visualization against the machine's work envelope.

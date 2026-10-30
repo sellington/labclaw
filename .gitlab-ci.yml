@@ -1,0 +1,28 @@
+stages:
+  - validate
+  - deploy
+
+validate:quality-and-tests:
+  stage: validate
+  image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+  script:
+    - uv sync --extra dev --extra llm
+    - uv run ruff check src/ tests/
+    - uv run ruff format --check src/ tests/
+    - uv run mypy src/labclaw/ src/makerclaw/
+    - PYTHONPATH=src uv run pytest --cov=labclaw --cov=makerclaw --cov-fail-under=100 -q
+
+deploy:makerclaw-dev:
+  stage: deploy
+  image: alpine:3.23
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $MAKERCLAW_DEV_HOST != null && $MAKERCLAW_DEV_HOST != ""'
+      when: on_success
+    - when: never
+  before_script:
+    - apk add --no-cache openssh-client
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - cp /ssh_key ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+    - ssh-keyscan -H "$MAKERCLAW_DEV_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+  script:
+    - ssh -i ~/.ssh/id_ed25519 "claude@$MAKERCLAW_DEV_HOST" "cd /opt/makerclaw && git fetch gitlab && git reset --hard gitlab/main && /home/claude/.local/bin/uv sync --extra dev --extra llm && sudo systemctl restart makerclaw.service makerclaw-simulators.service && sleep 2 && sudo systemctl is-active makerclaw.service makerclaw-simulators.service"

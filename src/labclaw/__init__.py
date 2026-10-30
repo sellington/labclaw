@@ -1,3 +1,5 @@
-"""LabClaw — Cloud Brain for science. Unified gateway to 2400+ scientific tools."""
+"""MakerClaw — Unified Makerspace AI Control Plane."""
 
-__version__ = "0.0.1"
+from __future__ import annotations
+
+__version__ = "0.3.0"

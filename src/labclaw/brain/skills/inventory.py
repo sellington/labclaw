@@ -289,6 +289,8 @@ class InventorySkill:
             "inventory_check_bom": self._check_bom,
             "inventory_low_stock": self._low_stock,
             "inventory_seed_defaults": self._seed_defaults,
+            "inventory_import_order": self._import_order,
+            "inventory_bin_label_svg": self._bin_label_svg,
         }
         handler = handlers.get(tool_name)
         if handler is None:
@@ -585,6 +587,86 @@ class InventorySkill:
             },
         )
 
+    async def _import_order(
+        self,
+        csv_text: str = "",
+        vendor: str = "generic",
+        default_category: str = "electronics",
+        default_location: str = "receiving-bin",
+        **kwargs: Any,
+    ) -> BrainResult:
+        """Import a vendor order CSV (LCSC, DigiKey, Mouser, Bambu) into SQLite inventory."""
+        import csv
+        import io
+
+        if not csv_text.strip():
+            return BrainResult(success=False, error="'csv_text' is required")
+
+        reader = csv.DictReader(io.StringIO(csv_text.strip()))
+        imported: list[str] = []
+        for row in reader:
+            norm = {str(k).strip().lower(): str(v).strip() for k, v in row.items() if k}
+            sku = (
+                norm.get("sku")
+                or norm.get("lcsc part #")
+                or norm.get("lcsc")
+                or norm.get("digi-key part number")
+                or norm.get("mpn")
+                or ""
+            )
+            name = norm.get("name") or norm.get("description") or norm.get("comment") or sku
+            if not sku:
+                continue
+            qty = float(norm.get("quantity") or norm.get("qty") or 1.0)
+            cost = float(norm.get("unit_cost_usd") or norm.get("unit price") or 0.0)
+            cat = norm.get("category") or default_category
+            loc = norm.get("location") or default_location
+            await self._add_item(
+                sku=sku,
+                name=name,
+                category=cat,
+                quantity=qty,
+                location=loc,
+                specs={"vendor": vendor, "footprint": norm.get("footprint", "")},
+                unit_cost_usd=cost,
+            )
+            imported.append(sku.upper())
+
+        return BrainResult(
+            success=True,
+            data={"vendor": vendor, "imported_skus": imported, "count": len(imported)},
+        )
+
+    async def _bin_label_svg(self, sku: str = "", **kwargs: Any) -> BrainResult:
+        """Generate a printable SVG storage bin label with SKU, location, and barcode."""
+        sku_clean = sku.strip().upper()
+        row = self._conn.execute(
+            "SELECT * FROM inventory_items WHERE UPPER(sku) = ?", (sku_clean,)
+        ).fetchone()
+        if row is None:
+            return BrainResult(success=False, error=f"SKU '{sku}' not found")
+
+        item = self._row_to_dict(row)
+        bars = "".join(
+            f"<rect x='{14 + idx * 6}' y='62' width='{(ord(ch) % 3) + 1}' height='22' fill='#000'/>"
+            for idx, ch in enumerate(sku_clean[:28])
+        )
+        svg = (
+            "<svg xmlns='http://www.w3.org/2000/svg' width='240' height='96' viewBox='0 0 240 96'>"
+            "<rect width='240' height='96' rx='6' fill='#fff' stroke='#000' stroke-width='2'/>"
+            f"<text x='12' y='24' font-family='monospace' font-size='14'>"
+            f"{item['sku']}</text>"
+            f"<text x='12' y='42' font-family='sans-serif' font-size='11'>"
+            f"{item['name'][:30]}</text>"
+            f"<text x='12' y='56' font-family='monospace' font-size='10'>"
+            f"LOC: {item['location']} | QTY: {item['quantity']} {item['unit']}</text>"
+            f"{bars}</svg>"
+        )
+        return BrainResult(
+            success=True,
+            data={"sku": item["sku"], "location": item["location"], "svg": svg},
+        )
+
     async def list_tools(self) -> list[ToolInfo]:
         """Return all inventory tools."""
         return [
@@ -638,6 +720,18 @@ class InventorySkill:
                 description=(
                     "Seed the inventory database with the default makerspace starter catalog."
                 ),
+                skill="inventory",
+                category="inventory",
+            ),
+            ToolInfo(
+                name="inventory_import_order",
+                description="Import a DigiKey, Mouser, LCSC, or Bambu CSV into shop inventory.",
+                skill="inventory",
+                category="inventory",
+            ),
+            ToolInfo(
+                name="inventory_bin_label_svg",
+                description="Generate a printable SVG storage bin label with barcode for a SKU.",
                 skill="inventory",
                 category="inventory",
             ),
