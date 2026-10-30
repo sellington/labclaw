@@ -23,6 +23,7 @@ def main() -> None:
     demo_p.add_argument("--maker", action="store_true", help="Run full makerspace workflow demo")
 
     brain_p = sub.add_parser("brain", help="Start MakerClaw REST API & Web Dashboard")
+    brain_p.add_argument("--host", default="127.0.0.1")
     brain_p.add_argument("--port", type=int, default=18802)
 
     sub.add_parser("mcp", help="Start MCP server for Claude Desktop / Hermes Agent")
@@ -48,7 +49,7 @@ def main() -> None:
         else:
             asyncio.run(_demo())
     elif args.command == "brain":
-        _start_brain(args.port)
+        _start_brain(args.port, args.host)
     elif args.command == "mcp":
         _start_mcp()
     elif args.command == "tools":
@@ -140,14 +141,14 @@ async def _run_docs(search: str) -> None:
     print(json.dumps(res.model_dump(), indent=2, default=str))
 
 
-def _start_brain(port: int) -> None:
+def _start_brain(port: int, host: str = "127.0.0.1") -> None:
     """Start the Cloud Brain REST API server."""
     import uvicorn
 
     from labclaw.brain.server import app
 
-    print(f"Starting MakerClaw Cloud Brain on port {port}...")
-    uvicorn.run(app, host="127.0.0.1", port=port)
+    print(f"Starting MakerClaw Cloud Brain on {host}:{port}...")
+    uvicorn.run(app, host=host, port=port)
 
 
 def _start_mcp() -> None:
