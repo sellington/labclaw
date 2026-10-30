@@ -18,6 +18,10 @@ class SkillCapability(StrEnum):
     DATA_ANALYSIS = "data_analysis"
     REASONING = "reasoning"
     WRITING = "writing"
+    INVENTORY = "inventory"
+    DEVICE_CONTROL = "device_control"
+    CAD_CAM = "cad_cam"
+    DOCUMENTATION = "documentation"
 
 
 class SkillMetadata(BaseModel):

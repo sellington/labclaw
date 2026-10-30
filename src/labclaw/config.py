@@ -1,4 +1,4 @@
-"""Configuration loading for labclaw."""
+"""Configuration loading for MakerClaw / LabClaw."""
 
 from __future__ import annotations
 
@@ -6,12 +6,14 @@ import logging
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
 _SEARCH_PATHS = [
+    Path("makerclaw.yaml"),
     Path("labclaw.yaml"),
+    Path.home() / ".makerclaw" / "config.yaml",
     Path.home() / ".labclaw" / "config.yaml",
 ]
 
@@ -38,16 +40,25 @@ class LLMConfig(BaseModel):
     max_tokens: int = 4096
 
 
+class MakerspaceConfig(BaseModel):
+    shop_name: str = "MakerClaw Workshop"
+    inventory_db: str = str(Path.home() / ".labclaw" / "inventory.db")
+    docs_dir: str = str(Path.home() / ".labclaw" / "docs")
+    default_cnc_machine: str = "cubiko-cnc"
+    default_printer: str = "bambu-p1s"
+
+
 class LabclawConfig(BaseModel):
-    brain: BrainConfig = BrainConfig()
-    skills: dict[str, SkillConfig] = {}
-    llm: LLMConfig = LLMConfig()
+    brain: BrainConfig = Field(default_factory=BrainConfig)
+    skills: dict[str, SkillConfig] = Field(default_factory=dict)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
+    makerspace: MakerspaceConfig = Field(default_factory=MakerspaceConfig)
 
 
 def load_config(path: Path | None = None) -> LabclawConfig:
     """Load config from file or defaults.
 
-    Search: explicit path -> ./labclaw.yaml -> ~/.labclaw/config.yaml -> defaults.
+    Search: explicit path -> ./makerclaw.yaml -> ./labclaw.yaml -> ~/.labclaw/config.yaml.
     """
     if path and path.exists():
         return _parse(path)
