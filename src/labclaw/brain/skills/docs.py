@@ -119,19 +119,28 @@ class DocsSkill:
                     {
                         "id": 1,
                         "discipline": "design",
-                        "task": "Model 2-piece Left/Right C-channel rails (21mm Z slot, 75mm rear port cutout)",
+                        "task": (
+                            "Model 2-piece Left/Right C-channel rails "
+                            "(21mm Z slot, 75mm rear port cutout)"
+                        ),
                         "done": True,
                     },
                     {
                         "id": 2,
                         "discipline": "3d_printing",
-                        "task": "Print Left & Right C-rails in PETG HF Orange on Bambu P1S (4 walls, 25% gyroid)",
+                        "task": (
+                            "Print Left & Right C-rails in PETG HF Orange "
+                            "on Bambu P1S (4 walls, 25% gyroid)"
+                        ),
                         "done": False,
                     },
                     {
                         "id": 3,
                         "discipline": "general_fab",
-                        "task": "Mount under maker desk with #8 wood screws (10mm top air gap, rear exhaust clear)",
+                        "task": (
+                            "Mount under maker desk with #8 wood screws "
+                            "(10mm top air gap, rear exhaust clear)"
+                        ),
                         "done": False,
                     },
                 ],
@@ -144,25 +153,37 @@ class DocsSkill:
                     {
                         "id": 1,
                         "discipline": "design",
-                        "task": "Export mirrored B.Cu Gerber & pcb2gcode isolation/drill/cutout .nc files",
+                        "task": (
+                            "Export mirrored B.Cu Gerber & pcb2gcode "
+                            "isolation/drill/cutout .nc files"
+                        ),
                         "done": True,
                     },
                     {
                         "id": 2,
                         "discipline": "cnc",
-                        "task": "Probe 4x4 G38.2 heightmap on 100x80mm FR-4 and mill 01_isolation_B_Cu.nc",
+                        "task": (
+                            "Probe 4x4 G38.2 heightmap on 100x80mm FR-4 "
+                            "and mill 01_isolation_B_Cu.nc"
+                        ),
                         "done": True,
                     },
                     {
                         "id": 3,
                         "discipline": "soldering",
-                        "task": "Pre-tune LM2596 buck to 5.00V, then solder female header sockets & THT passives",
+                        "task": (
+                            "Pre-tune LM2596 buck to 5.00V, then solder "
+                            "female header sockets & THT passives"
+                        ),
                         "done": False,
                     },
                     {
                         "id": 4,
                         "discipline": "general_fab",
-                        "task": "Clip C-channel snap cradle onto pendulum arm and route motor phase leads",
+                        "task": (
+                            "Clip C-channel snap cradle onto pendulum arm "
+                            "and route motor phase leads"
+                        ),
                         "done": False,
                     },
                 ],
