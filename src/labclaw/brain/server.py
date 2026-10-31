@@ -323,7 +323,9 @@ _SETUP_HTML = (
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard() -> HTMLResponse:
     """Serve the MakerClaw web control plane dashboard."""
-    return HTMLResponse(content=_DASHBOARD_HTML)
+    from labclaw.brain.showcase import SHOWCASE_HTML
+
+    return HTMLResponse(content=SHOWCASE_HTML)
 
 
 @app.get("/showcase", response_class=HTMLResponse)
