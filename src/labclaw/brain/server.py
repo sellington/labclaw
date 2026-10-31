@@ -181,6 +181,7 @@ _DASHBOARD_HTML = (
     "<span>API Key:</span>"
     "<input id='ak' type='password' placeholder='Paste X-API-Key token' style='width:260px'"
     " onchange='localStorage.setItem(\"mc_key\",this.value)'/>"
+    "<a href='/showcase'><strong>[NEW: 3-Design UX Showcase]</strong></a>"
     "<a href='/setup'>[First-Run Setup Wizard]</a>"
     "<a href='/docs'>[OpenAPI / Swagger UI]</a>"
     "<span id='hbadge'></span>"
@@ -323,6 +324,14 @@ _SETUP_HTML = (
 async def get_dashboard() -> HTMLResponse:
     """Serve the MakerClaw web control plane dashboard."""
     return HTMLResponse(content=_DASHBOARD_HTML)
+
+
+@app.get("/showcase", response_class=HTMLResponse)
+async def get_showcase() -> HTMLResponse:
+    """Serve the interactive 3-design UI/UX architecture showcase."""
+    from labclaw.brain.showcase import SHOWCASE_HTML
+
+    return HTMLResponse(content=SHOWCASE_HTML)
 
 
 @app.get("/setup", response_class=HTMLResponse)

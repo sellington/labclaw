@@ -110,6 +110,10 @@ class TestMakerspaceServerEndpoints:
         assert setup_resp.status_code == 200
         assert "MakerClaw Setup Wizard" in setup_resp.text
 
+        show_resp = await client.get("/showcase")
+        assert show_resp.status_code == 200
+        assert "MakerClaw UX Showcase" in show_resp.text
+
         prof_resp = await client.post(
             "/brain/profile",
             json={
