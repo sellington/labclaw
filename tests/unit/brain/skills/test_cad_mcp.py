@@ -149,5 +149,12 @@ class TestCadMcpSkill:
         assert fed.data["count"] == 3
         assert fed.data["selected_tools"][0]["endpoint_id"] == "kicad-eda"
 
+        stl_res = await skill.execute(
+            "cad_generate_aruco_bin_stl", sku="MCU-XIAO-ESP32C6", grid_x=1, grid_y=2, height_u=3
+        )
+        assert stl_res.success is True
+        assert "solid aruco_tile_" in stl_res.data["tile_stl"]
+        assert "solid GF-1x2x3U" in stl_res.data["bin_stl"]
+
         tools = await skill.list_tools()
-        assert len(tools) == 7
+        assert len(tools) == 8

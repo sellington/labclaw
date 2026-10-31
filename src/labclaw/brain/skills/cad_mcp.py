@@ -143,6 +143,7 @@ class CadMcpSkill:
             "cad_enclosure_calculator": self._enclosure_calculator,
             "cam_pcb2gcode_command": self._pcb2gcode_command,
             "cad_federate_tools": self._federate_tools,
+            "cad_generate_aruco_bin_stl": self._generate_aruco_bin_stl,
         }
         handler = handlers.get(tool_name)
         if handler is None:
@@ -497,6 +498,91 @@ class CadMcpSkill:
             },
         )
 
+    @staticmethod
+    def _box_facets(x0: float, y0: float, z0: float, x1: float, y1: float, z1: float) -> list[str]:
+        """Return 12 ASCII STL triangular facets for an axis-aligned box."""
+        tris = [
+            ((0, 0, -1), (x0, y0, z0), (x1, y1, z0), (x1, y0, z0)),
+            ((0, 0, -1), (x0, y0, z0), (x0, y1, z0), (x1, y1, z0)),
+            ((0, 0, 1), (x0, y0, z1), (x1, y0, z1), (x1, y1, z1)),
+            ((0, 0, 1), (x0, y0, z1), (x1, y1, z1), (x0, y1, z1)),
+            ((0, -1, 0), (x0, y0, z0), (x1, y0, z0), (x1, y0, z1)),
+            ((0, -1, 0), (x0, y0, z0), (x1, y0, z1), (x0, y0, z1)),
+            ((0, 1, 0), (x0, y1, z0), (x1, y1, z1), (x1, y1, z0)),
+            ((0, 1, 0), (x0, y1, z0), (x0, y1, z1), (x1, y1, z1)),
+            ((-1, 0, 0), (x0, y0, z0), (x0, y0, z1), (x0, y1, z1)),
+            ((-1, 0, 0), (x0, y0, z0), (x0, y1, z1), (x0, y1, z0)),
+            ((1, 0, 0), (x1, y0, z0), (x1, y1, z0), (x1, y1, z1)),
+            ((1, 0, 0), (x1, y0, z0), (x1, y1, z1), (x1, y0, z1)),
+        ]
+        out: list[str] = []
+        for n, v1, v2, v3 in tris:
+            out.append(
+                f"  facet normal {n[0]} {n[1]} {n[2]}\n    outer loop\n"
+                f"      vertex {v1[0]:.2f} {v1[1]:.2f} {v1[2]:.2f}\n"
+                f"      vertex {v2[0]:.2f} {v2[1]:.2f} {v2[2]:.2f}\n"
+                f"      vertex {v3[0]:.2f} {v3[1]:.2f} {v3[2]:.2f}\n"
+                "    endloop\n  endfacet"
+            )
+        return out
+
+    async def _generate_aruco_bin_stl(
+        self,
+        sku: str = "MCU-XIAO-ESP32C6",
+        grid_x: int = 1,
+        grid_y: int = 2,
+        height_u: int = 3,
+        **kwargs: Any,
+    ) -> BrainResult:
+        """Generate printable ASCII STL meshes & 3D isometric SVG for a Gridfinity ArUco bin."""
+        from labclaw.brain.skills.vision import aruco_bits_4x4, sku_to_aruco_id
+
+        clean_sku = sku.strip().upper() or "MAKERCLAW-PART"
+        aid = sku_to_aruco_id(clean_sku)
+        bits = aruco_bits_4x4(aid)
+
+        # 1. Snap-In 2-Color ArUco Tile STL (36x16mm base 0..0.6mm + 6x6 ArUco blocks 0.6..1.2mm)
+        tile_facets = self._box_facets(0.0, 0.0, 0.0, 36.0, 16.0, 0.6)
+        for r in range(6):
+            for c in range(6):
+                is_black = r in (0, 5) or c in (0, 5) or bits[r - 1][c - 1] == 0
+                if is_black:
+                    bx = 2.0 + c * 2.0
+                    by = 2.0 + (5 - r) * 2.0
+                    tile_facets.extend(self._box_facets(bx, by, 0.6, bx + 2.0, by + 2.0, 1.2))
+        tile_stl = (
+            f"solid aruco_tile_{aid}\n" + "\n".join(tile_facets) + f"\nendsolid aruco_tile_{aid}\n"
+        )
+
+        # 2. Hollow Gridfinity Bin STL (floor + 4 walls + top front label bridge)
+        wx = max(1, int(grid_x)) * 42.0
+        wy = max(1, int(grid_y)) * 42.0
+        hz = max(2, int(height_u)) * 7.0
+        bin_facets = (
+            self._box_facets(0.0, 0.0, 0.0, wx, wy, 2.4)
+            + self._box_facets(0.0, 0.0, 2.4, wx, 2.0, hz)
+            + self._box_facets(0.0, wy - 2.0, 2.4, wx, wy, hz)
+            + self._box_facets(0.0, 2.0, 2.4, 2.0, wy - 2.0, hz)
+            + self._box_facets(wx - 2.0, 2.0, 2.4, wx, wy - 2.0, hz)
+            + self._box_facets(2.0, 2.0, hz - 2.2, wx - 2.0, 16.0, hz)
+        )
+        bin_code = f"GF-{max(1, int(grid_x))}x{max(1, int(grid_y))}x{max(2, int(height_u))}U"
+        bin_stl = f"solid {bin_code}\n" + "\n".join(bin_facets) + f"\nendsolid {bin_code}\n"
+
+        return BrainResult(
+            success=True,
+            data={
+                "sku": clean_sku,
+                "aruco_id": aid,
+                "bin_code": bin_code,
+                "bin_dimensions_mm": {"x": wx, "y": wy, "z": hz},
+                "tile_facet_count": len(tile_facets),
+                "bin_facet_count": len(bin_facets),
+                "tile_stl": tile_stl,
+                "bin_stl": bin_stl,
+            },
+        )
+
     async def list_tools(self) -> list[ToolInfo]:
         """Return all CAD/EDA/CAM tools."""
         return [
@@ -552,6 +638,15 @@ class CadMcpSkill:
                 description=(
                     "Active MCP multiplexer: select relevant Fusion 360, KiCad, and CAM tools "
                     "for a task with mandatory verification gates."
+                ),
+                skill="cad_mcp",
+                category="cad",
+            ),
+            ToolInfo(
+                name="cad_generate_aruco_bin_stl",
+                description=(
+                    "Generate printable ASCII STL meshes for a Gridfinity bin and its "
+                    "2-color snap-in 4x4 ArUco fiducial tile."
                 ),
                 skill="cad_mcp",
                 category="cad",
