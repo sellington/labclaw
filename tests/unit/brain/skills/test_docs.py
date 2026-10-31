@@ -127,5 +127,35 @@ class TestDocsSkill:
         assert ok_proj.success is True
         assert len(ok_proj.data["phases"]) == 5
 
+        # project tracker tools
+        plist = await skill.execute("project_list", discipline="cnc")
+        assert plist.success is True
+        assert plist.data["count"] >= 2
+
+        bad_create = await skill.execute("project_create", name="  ")
+        assert bad_create.success is False
+
+        pcreate = await skill.execute("project_create", name="Custom Soldering Rig")
+        assert pcreate.success is True
+        pid = pcreate.data["project_id"]
+
+        bad_todo = await skill.execute("project_add_todo", project_id="nope", task="")
+        assert bad_todo.success is False
+
+        ok_todo = await skill.execute(
+            "project_add_todo", project_id=pid, discipline="soldering", task="Tin iron tip"
+        )
+        assert ok_todo.success is True
+
+        bad_tog1 = await skill.execute("project_toggle_todo", project_id="nope", todo_id=1)
+        assert bad_tog1.success is False
+
+        bad_tog2 = await skill.execute("project_toggle_todo", project_id=pid, todo_id=999)
+        assert bad_tog2.success is False
+
+        ok_tog = await skill.execute("project_toggle_todo", project_id=pid, todo_id=1)
+        assert ok_tog.success is True
+        assert ok_tog.data["todo"]["done"] is True
+
         tools = await skill.list_tools()
-        assert len(tools) == 8
+        assert len(tools) == 12

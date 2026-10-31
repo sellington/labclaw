@@ -110,6 +110,64 @@ class DocsSkill:
         self._docs_dir = Path(docs_dir) if docs_dir else None
         self._llm_provider = llm_provider
         self._docs: dict[str, dict[str, Any]] = {k: dict(v) for k, v in _DEFAULT_SOPS.items()}
+        self._projects: dict[str, dict[str, Any]] = {
+            "cubiko-underdesk-mount": {
+                "project_id": "cubiko-underdesk-mount",
+                "name": "Cubiko-Bench Low-Profile Under-Desk Mount (2019 MBP)",
+                "status": "active",
+                "todos": [
+                    {
+                        "id": 1,
+                        "discipline": "design",
+                        "task": "Model 2-piece Left/Right C-channel rails (21mm Z slot, 75mm rear port cutout)",
+                        "done": True,
+                    },
+                    {
+                        "id": 2,
+                        "discipline": "3d_printing",
+                        "task": "Print Left & Right C-rails in PETG HF Orange on Bambu P1S (4 walls, 25% gyroid)",
+                        "done": False,
+                    },
+                    {
+                        "id": 3,
+                        "discipline": "general_fab",
+                        "task": "Mount under maker desk with #8 wood screws (10mm top air gap, rear exhaust clear)",
+                        "done": False,
+                    },
+                ],
+            },
+            "rwp-cnc-pcb": {
+                "project_id": "rwp-cnc-pcb",
+                "name": "Reaction-Wheel Pendulum CNC PCB & Soldering",
+                "status": "active",
+                "todos": [
+                    {
+                        "id": 1,
+                        "discipline": "design",
+                        "task": "Export mirrored B.Cu Gerber & pcb2gcode isolation/drill/cutout .nc files",
+                        "done": True,
+                    },
+                    {
+                        "id": 2,
+                        "discipline": "cnc",
+                        "task": "Probe 4x4 G38.2 heightmap on 100x80mm FR-4 and mill 01_isolation_B_Cu.nc",
+                        "done": True,
+                    },
+                    {
+                        "id": 3,
+                        "discipline": "soldering",
+                        "task": "Pre-tune LM2596 buck to 5.00V, then solder female header sockets & THT passives",
+                        "done": False,
+                    },
+                    {
+                        "id": 4,
+                        "discipline": "general_fab",
+                        "task": "Clip C-channel snap cradle onto pendulum arm and route motor phase leads",
+                        "done": False,
+                    },
+                ],
+            },
+        }
         if self._docs_dir is not None:
             self._load_disk_docs(self._docs_dir)
 
@@ -141,6 +199,10 @@ class DocsSkill:
             "reason": self._maker_reason,
             "design_project": self._design_project,
             "design_experiment": self._design_project,
+            "project_list": self._project_list,
+            "project_create": self._project_create,
+            "project_add_todo": self._project_add_todo,
+            "project_toggle_todo": self._project_toggle_todo,
         }
         handler = handlers.get(tool_name)
         if handler is None:
@@ -370,6 +432,72 @@ class DocsSkill:
         }
         return BrainResult(success=True, data=plan)
 
+    async def _project_list(self, discipline: str = "", **kwargs: Any) -> BrainResult:
+        """List all makerspace build projects and their discipline-tagged TODOs."""
+        disc = discipline.strip().lower()
+        projects = []
+        for p in self._projects.values():
+            todos = p["todos"]
+            if disc:
+                todos = [t for t in todos if t["discipline"] == disc]
+            done_cnt = sum(1 for t in p["todos"] if t["done"])
+            total_cnt = len(p["todos"])
+            pct = round((done_cnt / total_cnt) * 100) if total_cnt else 0
+            projects.append({**p, "todos": todos, "progress_pct": pct})
+        return BrainResult(success=True, data={"projects": projects, "count": len(projects)})
+
+    async def _project_create(
+        self,
+        project_id: str = "",
+        name: str = "",
+        status: str = "active",
+        **kwargs: Any,
+    ) -> BrainResult:
+        """Create a new makerspace project."""
+        pid = project_id.strip().lower().replace(" ", "-") or name.strip().lower().replace(" ", "-")
+        if not pid or not name.strip():
+            return BrainResult(success=False, error="'name' is required")
+        proj = {"project_id": pid, "name": name.strip(), "status": status, "todos": []}
+        self._projects[pid] = proj
+        return BrainResult(success=True, data=proj)
+
+    async def _project_add_todo(
+        self,
+        project_id: str = "",
+        task: str = "",
+        discipline: str = "general_fab",
+        **kwargs: Any,
+    ) -> BrainResult:
+        """Add a discipline-tagged TODO (3d_printing, soldering, cnc, design, general_fab)."""
+        proj = self._projects.get(project_id.strip())
+        if proj is None or not task.strip():
+            return BrainResult(success=False, error="Valid 'project_id' and 'task' required")
+        next_id = max((int(t["id"]) for t in proj["todos"]), default=0) + 1
+        item = {
+            "id": next_id,
+            "discipline": discipline.strip().lower() or "general_fab",
+            "task": task.strip(),
+            "done": False,
+        }
+        proj["todos"].append(item)
+        return BrainResult(success=True, data={"project_id": project_id, "todo": item})
+
+    async def _project_toggle_todo(
+        self,
+        project_id: str = "",
+        todo_id: int = 1,
+        **kwargs: Any,
+    ) -> BrainResult:
+        """Toggle completion status of a project TODO item."""
+        proj = self._projects.get(project_id.strip())
+        if proj is None:
+            return BrainResult(success=False, error=f"Project '{project_id}' not found")
+        for t in proj["todos"]:
+            if int(t["id"]) == int(todo_id):
+                t["done"] = not bool(t["done"])
+                return BrainResult(success=True, data={"project_id": project_id, "todo": t})
+        return BrainResult(success=False, error=f"Todo #{todo_id} not found")
+
     async def list_tools(self) -> list[ToolInfo]:
         """Return all documentation and makerspace advisor tools."""
         return [
@@ -430,6 +558,30 @@ class DocsSkill:
                 description="Makerspace and engineering domain reasoning grounded in shop SOPs.",
                 skill="docs",
                 category="reasoning",
+            ),
+            ToolInfo(
+                name="project_list",
+                description="List makerspace build projects and discipline-tagged TODOs.",
+                skill="docs",
+                category="projects",
+            ),
+            ToolInfo(
+                name="project_create",
+                description="Create a new makerspace build project.",
+                skill="docs",
+                category="projects",
+            ),
+            ToolInfo(
+                name="project_add_todo",
+                description="Add a 3d_printing, soldering, cnc, design, or general_fab TODO.",
+                skill="docs",
+                category="projects",
+            ),
+            ToolInfo(
+                name="project_toggle_todo",
+                description="Toggle a makerspace project TODO between open and completed.",
+                skill="docs",
+                category="projects",
             ),
         ]
 
