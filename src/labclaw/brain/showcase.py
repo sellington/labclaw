@@ -6,7 +6,7 @@ Features the redesigned Visual Inventory Wall with:
 - Visual stock capacity gauges + inline [-] / [+] SQLite stock steppers
 - Category filter pills with live counts, instant search, and Card Grid vs Shelf Table toggle
 - Slide-over / modal "Intake / Edit Component" drawer with Zero-Math Package Presets
-- Right-hand Live Visual Inspector with mouse-rotatable 3D STL preview, 4x4 ArUco label, and 2D G-code
+- Right-hand Live Visual Inspector with mouse-rotatable 3D STL preview and 4x4 ArUco label
 """
 
 from __future__ import annotations
